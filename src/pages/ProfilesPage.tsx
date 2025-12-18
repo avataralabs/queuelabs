@@ -19,9 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, Users, Calendar } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, Clock } from 'lucide-react';
 import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
 
 export default function ProfilesPage() {
   const { profiles, scheduleSlots, addProfile, updateProfile, deleteProfile } = useAppStore();
@@ -60,12 +59,12 @@ export default function ProfilesPage() {
   
   return (
     <MainLayout>
-      <div className="space-y-8 animate-fade-in">
+      <div className="space-y-6 animate-fade-in">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Profiles</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl font-bold mb-1">Profiles</h1>
+            <p className="text-muted-foreground text-sm">
               Manage your social media profiles
             </p>
           </div>
@@ -78,14 +77,14 @@ export default function ProfilesPage() {
             }
           }}>
             <DialogTrigger asChild>
-              <Button variant="glow" size="lg">
-                <Plus className="w-5 h-5" />
+              <Button>
+                <Plus className="w-4 h-4" />
                 Add Profile
               </Button>
             </DialogTrigger>
-            <DialogContent className="glass border-border">
+            <DialogContent className="bg-card border-border">
               <DialogHeader>
-                <DialogTitle className="gradient-text">
+                <DialogTitle>
                   {editingProfile ? 'Edit Profile' : 'New Profile'}
                 </DialogTitle>
               </DialogHeader>
@@ -129,7 +128,7 @@ export default function ProfilesPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleSave} className="w-full" variant="gradient">
+                <Button onClick={handleSave} className="w-full">
                   {editingProfile ? 'Save Changes' : 'Create Profile'}
                 </Button>
               </div>
@@ -139,27 +138,27 @@ export default function ProfilesPage() {
         
         {/* Profiles Grid */}
         {profiles.length === 0 ? (
-          <div className="glass rounded-xl border border-border p-12 text-center">
+          <div className="glass rounded-xl p-12 text-center">
             <Users className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
             <h2 className="text-xl font-semibold mb-2">No Profiles Yet</h2>
             <p className="text-muted-foreground mb-6">
               Create your first profile to start scheduling content
             </p>
-            <Button variant="glow" onClick={() => setDialogOpen(true)}>
+            <Button onClick={() => setDialogOpen(true)}>
               <Plus className="w-4 h-4" />
               Create Profile
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {profiles.map(profile => (
               <div 
                 key={profile.id}
-                className="glass rounded-xl border border-border p-6 hover:border-primary/30 transition-all duration-300 group"
+                className="glass rounded-xl p-5 hover:shadow-elevated transition-all duration-200 group"
               >
                 <div className="flex items-start justify-between mb-4">
                   <PlatformBadge platform={profile.platform} />
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button 
                       size="icon-sm" 
                       variant="ghost"
@@ -177,19 +176,19 @@ export default function ProfilesPage() {
                   </div>
                 </div>
                 
-                <h3 className="text-xl font-semibold mb-2">{profile.name}</h3>
+                <h3 className="text-lg font-semibold mb-1">{profile.name}</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   Created {format(new Date(profile.createdAt), 'MMM d, yyyy')}
                 </p>
                 
                 <div className="flex items-center justify-between pt-4 border-t border-border">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Calendar className="w-4 h-4" />
+                    <Clock className="w-4 h-4" />
                     <span>{getSlotCount(profile.id)} time slots</span>
                   </div>
                   <Button variant="outline" size="sm" asChild>
                     <a href={`/schedule?profile=${profile.id}`}>
-                      Manage Schedule
+                      Manage Time Slot
                     </a>
                   </Button>
                 </div>

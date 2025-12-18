@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useAppStore } from '@/stores/appStore';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -9,41 +9,46 @@ import {
   Dialog, 
   DialogContent, 
   DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
+  DialogTitle 
 } from '@/components/ui/dialog';
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Upload, FileVideo, Trash2, Send, Calendar } from 'lucide-react';
+import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 export default function ContentPage() {
   const { contents, profiles, addContent, deleteContent, assignContentToProfile } = useAppStore();
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null);
   const [newContent, setNewContent] = useState({ fileName: '', caption: '' });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const pendingContents = contents.filter(c => c.status === 'pending');
   const assignedContents = contents.filter(c => c.status === 'assigned' || c.status === 'scheduled');
   
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setNewContent(prev => ({ ...prev, fileName: file.name }));
+    }
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
   const handleUpload = () => {
     if (!newContent.fileName.trim()) return;
     
     addContent({
       fileName: newContent.fileName,
       caption: newContent.caption,
-      fileSize: Math.random() * 100 * 1024 * 1024, // Mock file size
+      fileSize: selectedFile?.size || Math.random() * 100 * 1024 * 1024,
     });
     
     setNewContent({ fileName: '', caption: '' });
-    setUploadDialogOpen(false);
+    setSelectedFile(null);
   };
   
   const handleAssign = (profileId: string) => {
@@ -58,114 +63,124 @@ export default function ContentPage() {
   
   return (
     <MainLayout>
-      <div className="space-y-8 animate-fade-in">
+      <div className="space-y-6 animate-fade-in">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Content</h1>
-            <p className="text-muted-foreground">
-              Manage and upload your video content
+        <div>
+          <h1 className="text-2xl font-bold mb-1">Content</h1>
+          <p className="text-muted-foreground text-sm">
+            Upload and manage your video content
+          </p>
+        </div>
+        
+        {/* Upload Section - Main/Large */}
+        <div className="glass rounded-xl p-8">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            accept="video/*"
+            className="hidden"
+          />
+          
+          <div 
+            onClick={handleUploadClick}
+            className="border-2 border-dashed border-border rounded-xl p-12 text-center hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer mb-6"
+          >
+            <CloudUpload className="w-16 h-16 mx-auto mb-4 text-primary" />
+            <h3 className="text-lg font-semibold mb-2">
+              {selectedFile ? selectedFile.name : 'Click to upload video'}
+            </h3>
+            <p className="text-muted-foreground text-sm">
+              {selectedFile 
+                ? `${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB`
+                : 'or drag & drop your video file here'
+              }
             </p>
           </div>
           
-          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="glow" size="lg">
-                <Upload className="w-5 h-5" />
-                Upload Content
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="glass border-border">
-              <DialogHeader>
-                <DialogTitle className="gradient-text">Upload New Content</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
-                  <FileVideo className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                  <p className="text-muted-foreground mb-2">Drag & drop your video here</p>
-                  <p className="text-sm text-muted-foreground">or click to browse</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">File Name</label>
-                  <Input
-                    placeholder="video_filename.mp4"
-                    value={newContent.fileName}
-                    onChange={(e) => setNewContent(prev => ({ ...prev, fileName: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Caption</label>
-                  <Textarea
-                    placeholder="Write your caption here..."
-                    rows={4}
-                    value={newContent.caption}
-                    onChange={(e) => setNewContent(prev => ({ ...prev, caption: e.target.value }))}
-                  />
-                </div>
-                <Button onClick={handleUpload} className="w-full" variant="gradient">
+          {selectedFile && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Caption</label>
+                <Textarea
+                  placeholder="Write your caption here..."
+                  rows={3}
+                  value={newContent.caption}
+                  onChange={(e) => setNewContent(prev => ({ ...prev, caption: e.target.value }))}
+                  className="resize-none"
+                />
+              </div>
+              <div className="flex gap-3">
+                <Button onClick={handleUpload} className="flex-1" variant="default">
                   <Upload className="w-4 h-4" />
-                  Upload Video
+                  Add to Queue
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setSelectedFile(null);
+                    setNewContent({ fileName: '', caption: '' });
+                  }}
+                >
+                  Cancel
                 </Button>
               </div>
-            </DialogContent>
-          </Dialog>
+            </div>
+          )}
         </div>
         
-        {/* Content Tabs */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Info Cards - Smaller */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Pending Content */}
-          <div className="glass rounded-xl border border-border p-6">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-warning" />
-              Pending Content ({pendingContents.length})
-            </h2>
+          <div className="glass rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold flex items-center gap-2 text-sm">
+                <div className="w-2 h-2 rounded-full bg-warning" />
+                Pending ({pendingContents.length})
+              </h2>
+            </div>
             
             {pendingContents.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <FileVideo className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No pending content</p>
+              <div className="text-center py-6 text-muted-foreground">
+                <FileVideo className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No pending content</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-thin">
+              <div className="space-y-2 max-h-[280px] overflow-y-auto scrollbar-thin">
                 {pendingContents.map(content => (
                   <div 
                     key={content.id}
-                    className="p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors group"
+                    className="p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors group"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <FileVideo className="w-6 h-6 text-primary" />
-                        </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <FileVideo className="w-4 h-4 text-primary flex-shrink-0" />
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate" title={content.fileName}>
+                          <p className="font-medium text-sm truncate" title={content.fileName}>
                             {content.fileName}
                           </p>
-                          <p className="text-sm text-muted-foreground line-clamp-2">
-                            {content.caption || 'No caption'}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
+                          <p className="text-xs text-muted-foreground">
                             {format(new Date(content.uploadedAt), 'MMM d, HH:mm')}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button 
                           size="icon-sm" 
-                          variant="outline"
+                          variant="ghost"
                           onClick={() => {
                             setSelectedContentId(content.id);
                             setAssignDialogOpen(true);
                           }}
                         >
-                          <Send className="w-4 h-4" />
+                          <Send className="w-3.5 h-3.5" />
                         </Button>
                         <Button 
                           size="icon-sm" 
-                          variant="outline"
+                          variant="ghost"
                           onClick={() => deleteContent(content.id)}
                         >
-                          <Trash2 className="w-4 h-4 text-destructive" />
+                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
                         </Button>
                       </div>
                     </div>
@@ -176,51 +191,50 @@ export default function ContentPage() {
           </div>
           
           {/* Assigned/Scheduled Content */}
-          <div className="glass rounded-xl border border-border p-6">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-primary" />
-              Assigned Content ({assignedContents.length})
-            </h2>
+          <div className="glass rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold flex items-center gap-2 text-sm">
+                <div className="w-2 h-2 rounded-full bg-primary" />
+                Assigned ({assignedContents.length})
+              </h2>
+            </div>
             
             {assignedContents.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No assigned content</p>
+              <div className="text-center py-6 text-muted-foreground">
+                <Calendar className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No assigned content</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-thin">
+              <div className="space-y-2 max-h-[280px] overflow-y-auto scrollbar-thin">
                 {assignedContents.map(content => {
                   const profile = getProfileById(content.assignedProfileId);
                   return (
                     <div 
                       key={content.id}
-                      className="p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                      className="p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <FileVideo className="w-6 h-6 text-primary" />
-                          </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <FileVideo className="w-4 h-4 text-primary flex-shrink-0" />
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium truncate" title={content.fileName}>
+                            <p className="font-medium text-sm truncate" title={content.fileName}>
                               {content.fileName}
                             </p>
                             {profile && (
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex items-center gap-1 mt-0.5">
                                 <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />
-                                <span className="text-sm text-muted-foreground">{profile.name}</span>
+                                <span className="text-xs text-muted-foreground">{profile.name}</span>
+                                {content.scheduledAt && (
+                                  <span className="text-xs text-primary ml-1">
+                                    • {format(new Date(content.scheduledAt), 'HH:mm')}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                            {content.scheduledAt && (
-                              <p className="text-xs text-primary mt-1 flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                {format(new Date(content.scheduledAt), 'MMM d, HH:mm')}
-                              </p>
                             )}
                           </div>
                         </div>
                         <span className={cn(
-                          "px-3 py-1 rounded-full text-xs",
+                          "px-2 py-0.5 rounded text-xs",
                           content.status === 'scheduled' 
                             ? "bg-primary/10 text-primary" 
                             : "bg-warning/10 text-warning"
@@ -238,7 +252,7 @@ export default function ContentPage() {
         
         {/* Assign Dialog */}
         <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-          <DialogContent className="glass border-border">
+          <DialogContent className="bg-card border-border">
             <DialogHeader>
               <DialogTitle>Assign to Profile</DialogTitle>
             </DialogHeader>
@@ -253,7 +267,7 @@ export default function ContentPage() {
                     <button
                       key={profile.id}
                       onClick={() => handleAssign(profile.id)}
-                      className="w-full p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors flex items-center justify-between"
+                      className="w-full p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors flex items-center justify-between"
                     >
                       <span className="font-medium">{profile.name}</span>
                       <PlatformBadge platform={profile.platform} size="sm" />

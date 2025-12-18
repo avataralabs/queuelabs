@@ -8,7 +8,6 @@ import ContentPage from "./pages/ContentPage";
 import ProfilesPage from "./pages/ProfilesPage";
 import SchedulePage from "./pages/SchedulePage";
 import HistoryPage from "./pages/HistoryPage";
-import ReportsPage from "./pages/ReportsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -20,12 +19,11 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/content" element={<ContentPage />} />
+          <Route path="/" element={<ContentPage />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/profiles" element={<ProfilesPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/history" element={<HistoryPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

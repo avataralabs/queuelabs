@@ -26,7 +26,9 @@ export interface Content {
   assignedProfileId?: string;
   scheduledAt?: Date;
   scheduledSlotId?: string;
-  status: 'pending' | 'assigned' | 'scheduled' | 'uploaded' | 'failed';
+  status: 'pending' | 'assigned' | 'scheduled' | 'uploaded' | 'failed' | 'removed';
+  removedAt?: Date;
+  removedFromProfileId?: string;
 }
 
 export interface ScheduledContent {

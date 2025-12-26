@@ -5,19 +5,30 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { PlatformBadge } from '@/components/common/PlatformBadge';
-import { RemovedContentPanel } from '@/components/content/RemovedContentPanel';
+
 import { 
   Dialog, 
   DialogContent, 
   DialogHeader, 
   DialogTitle 
 } from '@/components/ui/dialog';
-import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload } from 'lucide-react';
+import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 export default function ContentPage() {
-  const { contents, profiles, addContent, deleteContent, assignContentToProfile } = useAppStore();
+  const { 
+    contents, 
+    profiles, 
+    addContent, 
+    deleteContent, 
+    assignContentToProfile,
+    getRemovedContents,
+    restoreRemovedContent,
+    permanentDeleteContent,
+    getProfileById: getProfileByIdStore
+  } = useAppStore();
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null);
   const [newContent, setNewContent] = useState({ fileName: '', caption: '' });
@@ -26,6 +37,7 @@ export default function ContentPage() {
   
   const pendingContents = contents.filter(c => c.status === 'pending');
   const assignedContents = contents.filter(c => c.status === 'assigned' || c.status === 'scheduled');
+  const removedContents = getRemovedContents();
   
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -58,6 +70,16 @@ export default function ContentPage() {
       setAssignDialogOpen(false);
       setSelectedContentId(null);
     }
+  };
+  
+  const handleRestore = (contentId: string) => {
+    restoreRemovedContent(contentId);
+    toast.success('Content restored to pending');
+  };
+  
+  const handlePermanentDelete = (contentId: string) => {
+    permanentDeleteContent(contentId);
+    toast.success('Content permanently deleted');
   };
   
   const getProfileById = (id?: string) => profiles.find(p => p.id === id);
@@ -130,8 +152,8 @@ export default function ContentPage() {
           )}
         </div>
         
-        {/* Info Cards - Smaller */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Info Cards - 3 columns */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Pending Content */}
           <div className="glass rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
@@ -249,10 +271,75 @@ export default function ContentPage() {
               </div>
             )}
           </div>
+          
+          {/* Trash Content */}
+          <div className="glass rounded-xl p-4 border border-orange-200 bg-orange-50/50">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold flex items-center gap-2 text-sm text-orange-800">
+                <Trash2 className="w-4 h-4" />
+                Trash ({removedContents.length})
+              </h2>
+            </div>
+            
+            {removedContents.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <Trash2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No removed content</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[280px] overflow-y-auto scrollbar-thin">
+                {removedContents.map(content => {
+                  const profile = content.removedFromProfileId 
+                    ? getProfileById(content.removedFromProfileId) 
+                    : null;
+                  return (
+                    <div 
+                      key={content.id}
+                      className="p-3 rounded-lg bg-white hover:bg-orange-50 transition-colors group border border-orange-100"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <FileVideo className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-sm truncate" title={content.fileName}>
+                              {content.fileName}
+                            </p>
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              {profile && (
+                                <>
+                                  <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />
+                                  <span>{profile.name}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button 
+                            size="icon-sm" 
+                            variant="ghost"
+                            onClick={() => handleRestore(content.id)}
+                            title="Restore"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-primary" />
+                          </Button>
+                          <Button 
+                            size="icon-sm" 
+                            variant="ghost"
+                            onClick={() => handlePermanentDelete(content.id)}
+                            title="Delete permanently"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-        
-        {/* Removed Content Trash */}
-        <RemovedContentPanel />
         
         {/* Assign Dialog */}
         <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>

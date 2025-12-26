@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAppStore } from '@/stores/appStore';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -17,10 +18,19 @@ import { format, addDays, subDays, startOfDay, isToday } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 export default function SchedulePage() {
+  const [searchParams] = useSearchParams();
   const { profiles, scheduleSlots } = useAppStore();
   const [selectedProfileId, setSelectedProfileId] = useState<string>(profiles[0]?.id || '');
   const [baseDate, setBaseDate] = useState(new Date());
   const [showSlotManager, setShowSlotManager] = useState(false);
+  
+  // Handle profile from URL param
+  useEffect(() => {
+    const profileParam = searchParams.get('profile');
+    if (profileParam && profiles.some(p => p.id === profileParam)) {
+      setSelectedProfileId(profileParam);
+    }
+  }, [searchParams, profiles]);
   
   const selectedProfile = profiles.find(p => p.id === selectedProfileId);
   

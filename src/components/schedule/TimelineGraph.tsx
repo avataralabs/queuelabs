@@ -261,10 +261,18 @@ export function TimelineGraph({ profileId, dates }: TimelineGraphProps) {
                     {scheduled && content && (
                       <div 
                         draggable={!isPast}
-                        onDragStart={(e) => handleDragStart(e, scheduled)}
-                        onDragEnd={handleDragEnd}
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          handleDragStart(e, scheduled);
+                        }}
+                        onDragEnd={(e) => {
+                          e.stopPropagation();
+                          handleDragEnd();
+                        }}
+                        onMouseDown={(e) => e.stopPropagation()}
                         className={cn(
-                          "h-full rounded-md p-2 text-xs transition-all duration-200 cursor-grab active:cursor-grabbing",
+                          "h-full rounded-md p-2 text-xs transition-all duration-200 select-none",
+                          !isPast && "cursor-grab active:cursor-grabbing",
                           "bg-primary/20 border border-primary/30 hover:bg-primary/30",
                           isDragging && "opacity-50 ring-2 ring-primary"
                         )}

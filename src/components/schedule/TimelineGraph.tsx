@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, DragEvent } from 'react';
 import { useAppStore } from '@/stores/appStore';
 import { Content, ScheduledContent, ScheduleSlot } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -8,16 +8,9 @@ import {
   DialogHeader, 
   DialogTitle,
 } from '@/components/ui/dialog';
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { format, isToday, isBefore, startOfDay, addDays, subDays } from 'date-fns';
+import { format, isToday, isBefore, startOfDay } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { FileVideo, ArrowRight, Calendar, Clock, ChevronLeft, ChevronRight, Trash2, ArrowLeftRight, RotateCcw } from 'lucide-react';
+import { FileVideo, Calendar, Clock, Trash2, RotateCcw, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TimelineGraphProps {
@@ -46,13 +39,8 @@ export function TimelineGraph({ profileId, dates }: TimelineGraphProps) {
     scheduledContent?: ScheduledContent;
   } | null>(null);
   
-  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
-  const [movingContent, setMovingContent] = useState<ScheduledContent | null>(null);
-  const [moveTargetDate, setMoveTargetDate] = useState<Date>(new Date());
-  const [moveTargetHour, setMoveTargetHour] = useState<number>(12);
-  
-  const [swapMode, setSwapMode] = useState(false);
-  const [swapSource, setSwapSource] = useState<ScheduledContent | null>(null);
+  const [draggedItem, setDraggedItem] = useState<ScheduledContent | null>(null);
+  const [dragOverSlot, setDragOverSlot] = useState<{ date: Date; hour: number } | null>(null);
   
   const profileSlots = scheduleSlots.filter(s => s.profileId === profileId && s.isActive);
   const pendingContents = getPendingContents();
@@ -93,17 +81,6 @@ export function TimelineGraph({ profileId, dates }: TimelineGraphProps) {
     slotTime.setHours(hour, 0, 0, 0);
     if (isBefore(slotTime, new Date())) return;
     
-    // Handle swap mode
-    if (swapMode && swapSource && scheduled) {
-      if (scheduled.id !== swapSource.id) {
-        swapScheduledContents(swapSource.id, scheduled.id);
-        toast.success('Content swapped successfully');
-      }
-      setSwapMode(false);
-      setSwapSource(null);
-      return;
-    }
-    
     if (scheduled) {
       setSelectedSlot({ date, hour, scheduledContent: scheduled });
     } else if (hasSlot && pendingContents.length > 0) {
@@ -130,30 +107,6 @@ export function TimelineGraph({ profileId, dates }: TimelineGraphProps) {
     toast.success('Content scheduled');
   };
   
-  const handleMoveContent = (sc: ScheduledContent) => {
-    setMovingContent(sc);
-    setMoveTargetDate(new Date(sc.scheduledDate));
-    setMoveTargetHour(sc.hour);
-    setMoveDialogOpen(true);
-    setSelectedSlot(null);
-  };
-  
-  const confirmMove = () => {
-    if (!movingContent) return;
-    
-    moveScheduledContent(movingContent.id, moveTargetDate, moveTargetHour, 0);
-    setMoveDialogOpen(false);
-    setMovingContent(null);
-    toast.success('Content moved');
-  };
-  
-  const handleStartSwap = (sc: ScheduledContent) => {
-    setSwapSource(sc);
-    setSwapMode(true);
-    setSelectedSlot(null);
-    toast.info('Click on another scheduled content to swap');
-  };
-  
   const handleRemoveFromSchedule = (scId: string) => {
     removeFromSchedule(scId);
     setSelectedSlot(null);
@@ -166,21 +119,79 @@ export function TimelineGraph({ profileId, dates }: TimelineGraphProps) {
     toast.success('Content unscheduled (back to pending)');
   };
   
-  const cancelSwapMode = () => {
-    setSwapMode(false);
-    setSwapSource(null);
+  // Drag and Drop handlers
+  const handleDragStart = (e: DragEvent, scheduled: ScheduledContent) => {
+    setDraggedItem(scheduled);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', scheduled.id);
+  };
+  
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setDragOverSlot(null);
+  };
+  
+  const handleDragOver = (e: DragEvent, date: Date, hour: number) => {
+    e.preventDefault();
+    const slotTime = new Date(date);
+    slotTime.setHours(hour, 0, 0, 0);
+    
+    // Don't allow drop on past slots
+    if (isBefore(slotTime, new Date())) return;
+    
+    const hasSlot = hasSlotAtHour(hour, date);
+    if (!hasSlot && !getScheduledContentForSlot(date, hour)) return;
+    
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverSlot({ date, hour });
+  };
+  
+  const handleDragLeave = () => {
+    setDragOverSlot(null);
+  };
+  
+  const handleDrop = (e: DragEvent, date: Date, hour: number) => {
+    e.preventDefault();
+    setDragOverSlot(null);
+    
+    if (!draggedItem) return;
+    
+    const slotTime = new Date(date);
+    slotTime.setHours(hour, 0, 0, 0);
+    if (isBefore(slotTime, new Date())) return;
+    
+    const targetScheduled = getScheduledContentForSlot(date, hour);
+    
+    if (targetScheduled) {
+      // Swap with existing content
+      if (targetScheduled.id !== draggedItem.id) {
+        swapScheduledContents(draggedItem.id, targetScheduled.id);
+        toast.success('Content swapped');
+      }
+    } else {
+      // Move to empty slot
+      const slot = getSlotForHour(hour);
+      if (slot) {
+        moveScheduledContent(draggedItem.id, date, hour, slot.minute || 0);
+        toast.success('Content moved');
+      }
+    }
+    
+    setDraggedItem(null);
   };
   
   return (
     <div className="space-y-3">
-      {/* Swap Mode Indicator */}
-      {swapMode && (
-        <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50 border border-amber-200">
-          <div className="flex items-center gap-2 text-amber-800">
-            <ArrowLeftRight className="w-4 h-4" />
-            <span className="text-sm font-medium">Swap mode: Click another scheduled content to swap</span>
+      {/* Drag Indicator */}
+      {draggedItem && (
+        <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/30">
+          <div className="flex items-center gap-2 text-primary">
+            <GripVertical className="w-4 h-4" />
+            <span className="text-sm font-medium">
+              Dragging: Drop on empty slot to move, or on another content to swap
+            </span>
           </div>
-          <Button variant="ghost" size="sm" onClick={cancelSwapMode}>
+          <Button variant="ghost" size="sm" onClick={handleDragEnd}>
             Cancel
           </Button>
         </div>
@@ -227,36 +238,47 @@ export function TimelineGraph({ profileId, dates }: TimelineGraphProps) {
                 const slotTime = new Date(date);
                 slotTime.setHours(hour, 0, 0, 0);
                 const isPast = isBefore(slotTime, new Date());
-                const isSwapTarget = swapMode && scheduled && swapSource?.id !== scheduled.id;
+                const isDragOver = dragOverSlot?.date.toISOString() === date.toISOString() && dragOverSlot?.hour === hour;
+                const isDragging = draggedItem?.id === scheduled?.id;
                 
                 return (
                   <div
                     key={`${date.toISOString()}-${hour}`}
-                    onClick={() => handleSlotClick(date, hour)}
+                    onClick={() => !draggedItem && handleSlotClick(date, hour)}
+                    onDragOver={(e) => handleDragOver(e, date, hour)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, date, hour)}
                     className={cn(
                       "min-h-[50px] border-l border-border/50 p-1 transition-all duration-200",
                       hasSlot && !scheduled && !isPast && "bg-timeline-slot cursor-pointer hover:bg-timeline-slot-hover",
                       scheduled && "bg-timeline-slot-filled",
                       isPast && "opacity-50",
                       isToday(date) && "bg-primary/5",
-                      isSwapTarget && "ring-2 ring-amber-400 cursor-pointer"
+                      isDragOver && !isDragging && "ring-2 ring-primary bg-primary/20",
+                      isDragOver && scheduled && !isDragging && "ring-2 ring-amber-400 bg-amber-100"
                     )}
                   >
                     {scheduled && content && (
                       <div 
+                        draggable={!isPast}
+                        onDragStart={(e) => handleDragStart(e, scheduled)}
+                        onDragEnd={handleDragEnd}
                         className={cn(
-                          "h-full rounded-md p-2 text-xs transition-all duration-200",
-                          "bg-primary/20 border border-primary/30 hover:bg-primary/30 cursor-pointer",
-                          swapMode && swapSource?.id === scheduled.id && "ring-2 ring-amber-500 bg-amber-100"
+                          "h-full rounded-md p-2 text-xs transition-all duration-200 cursor-grab active:cursor-grabbing",
+                          "bg-primary/20 border border-primary/30 hover:bg-primary/30",
+                          isDragging && "opacity-50 ring-2 ring-primary"
                         )}
                       >
-                        <p className="font-medium truncate" title={content.fileName}>
-                          {content.fileName.length > 15 
-                            ? `${content.fileName.slice(0, 15)}...` 
-                            : content.fileName
-                          }
-                        </p>
-                        <p className="text-muted-foreground mt-0.5">
+                        <div className="flex items-center gap-1">
+                          <GripVertical className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                          <p className="font-medium truncate flex-1" title={content.fileName}>
+                            {content.fileName.length > 12 
+                              ? `${content.fileName.slice(0, 12)}...` 
+                              : content.fileName
+                            }
+                          </p>
+                        </div>
+                        <p className="text-muted-foreground mt-0.5 ml-4">
                           {format(new Date(scheduled.scheduledDate), 'HH:mm')}
                         </p>
                       </div>
@@ -312,21 +334,11 @@ export function TimelineGraph({ profileId, dates }: TimelineGraphProps) {
                       ) : null;
                     })()}
                     
+                    <p className="text-xs text-muted-foreground">
+                      💡 Tip: Drag content to move or swap with another
+                    </p>
+                    
                     <div className="grid grid-cols-2 gap-2">
-                      <Button 
-                        variant="outline" 
-                        onClick={() => handleMoveContent(selectedSlot.scheduledContent!)}
-                      >
-                        <ArrowRight className="w-4 h-4 mr-1" />
-                        Move
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        onClick={() => handleStartSwap(selectedSlot.scheduledContent!)}
-                      >
-                        <ArrowLeftRight className="w-4 h-4 mr-1" />
-                        Swap
-                      </Button>
                       <Button 
                         variant="outline"
                         onClick={() => handleUnschedule(selectedSlot.scheduledContent!.id)}
@@ -377,79 +389,6 @@ export function TimelineGraph({ profileId, dates }: TimelineGraphProps) {
                 )}
               </div>
             )}
-          </DialogContent>
-        </Dialog>
-        
-        {/* Move Dialog */}
-        <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
-          <DialogContent className="glass border-border">
-            <DialogHeader>
-              <DialogTitle>Move Content</DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-4 pt-4">
-              {movingContent && (
-                <>
-                  {(() => {
-                    const content = getContentById(movingContent.contentId);
-                    return content ? (
-                      <div className="p-3 rounded-lg bg-secondary/30 flex items-center gap-3">
-                        <FileVideo className="w-5 h-5 text-primary" />
-                        <span className="font-medium truncate">{content.fileName}</span>
-                      </div>
-                    ) : null;
-                  })()}
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">New Date</label>
-                      <div className="flex items-center gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="icon-sm"
-                          onClick={() => setMoveTargetDate(prev => subDays(prev, 1))}
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <div className="flex-1 text-center py-2 px-4 rounded-lg bg-secondary/30">
-                          {format(moveTargetDate, 'EEEE, MMMM d')}
-                        </div>
-                        <Button 
-                          variant="outline" 
-                          size="icon-sm"
-                          onClick={() => setMoveTargetDate(prev => addDays(prev, 1))}
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">New Time</label>
-                      <Select 
-                        value={moveTargetHour.toString()} 
-                        onValueChange={(v) => setMoveTargetHour(parseInt(v))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[200px]">
-                          {HOURS.map(h => (
-                            <SelectItem key={h} value={h.toString()}>
-                              {h.toString().padStart(2, '0')}:00
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  
-                  <Button onClick={confirmMove} className="w-full" variant="gradient">
-                    Confirm Move
-                  </Button>
-                </>
-              )}
-            </div>
           </DialogContent>
         </Dialog>
       </div>

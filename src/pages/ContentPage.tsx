@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/stores/appStore';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { PlatformBadge } from '@/components/common/PlatformBadge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { 
   Dialog, 
@@ -12,32 +13,41 @@ import {
   DialogHeader, 
   DialogTitle 
 } from '@/components/ui/dialog';
-import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, RotateCcw } from 'lucide-react';
+import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export default function ContentPage() {
+  const navigate = useNavigate();
   const { 
     contents, 
     profiles, 
+    scheduleSlots,
     addContent, 
     deleteContent, 
     assignContentToProfile,
     getRemovedContents,
     restoreRemovedContent,
     permanentDeleteContent,
-    getProfileById: getProfileByIdStore
   } = useAppStore();
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null);
+  const [isFromTrash, setIsFromTrash] = useState(false);
   const [newContent, setNewContent] = useState({ fileName: '', caption: '' });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState('pending');
   
   const pendingContents = contents.filter(c => c.status === 'pending');
   const assignedContents = contents.filter(c => c.status === 'assigned' || c.status === 'scheduled');
   const removedContents = getRemovedContents();
+  
+  const getProfileById = (id?: string) => profiles.find(p => p.id === id);
+  
+  const getProfileHasSlots = (profileId: string) => {
+    return scheduleSlots.some(s => s.profileId === profileId && s.isActive);
+  };
   
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -62,27 +72,46 @@ export default function ContentPage() {
     
     setNewContent({ fileName: '', caption: '' });
     setSelectedFile(null);
+    toast.success('Content added to queue');
+  };
+  
+  const openAssignDialog = (contentId: string, fromTrash: boolean = false) => {
+    setSelectedContentId(contentId);
+    setIsFromTrash(fromTrash);
+    setAssignDialogOpen(true);
   };
   
   const handleAssign = (profileId: string) => {
-    if (selectedContentId) {
-      assignContentToProfile(selectedContentId, profileId);
-      setAssignDialogOpen(false);
-      setSelectedContentId(null);
+    if (!selectedContentId) return;
+    
+    const hasSlots = getProfileHasSlots(profileId);
+    if (!hasSlots) {
+      toast.error('This profile has no time slots. Please create time slots first.');
+      return;
     }
+    
+    // If from trash, restore first then assign
+    if (isFromTrash) {
+      restoreRemovedContent(selectedContentId);
+    }
+    
+    assignContentToProfile(selectedContentId, profileId);
+    setAssignDialogOpen(false);
+    setSelectedContentId(null);
+    setIsFromTrash(false);
+    toast.success('Content assigned to profile');
   };
   
-  const handleRestore = (contentId: string) => {
-    restoreRemovedContent(contentId);
-    toast.success('Content restored to pending');
+  const handleAssignedContentClick = (content: typeof assignedContents[0]) => {
+    if (content.assignedProfileId) {
+      navigate(`/schedule?profile=${content.assignedProfileId}`);
+    }
   };
   
   const handlePermanentDelete = (contentId: string) => {
     permanentDeleteContent(contentId);
     toast.success('Content permanently deleted');
   };
-  
-  const getProfileById = (id?: string) => profiles.find(p => p.id === id);
   
   return (
     <MainLayout>
@@ -152,194 +181,219 @@ export default function ContentPage() {
           )}
         </div>
         
-        {/* Info Cards - 3 columns */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Pending Content */}
-          <div className="glass rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold flex items-center gap-2 text-sm">
-                <div className="w-2 h-2 rounded-full bg-warning" />
-                Pending ({pendingContents.length})
-              </h2>
-            </div>
-            
-            {pendingContents.length === 0 ? (
-              <div className="text-center py-6 text-muted-foreground">
-                <FileVideo className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No pending content</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[280px] overflow-y-auto scrollbar-thin">
-                {pendingContents.map(content => (
-                  <div 
-                    key={content.id}
-                    className="p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors group"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <FileVideo className="w-4 h-4 text-primary flex-shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium text-sm truncate" title={content.fileName}>
-                            {content.fileName}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(content.uploadedAt), 'MMM d, HH:mm')}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button 
-                          size="icon-sm" 
-                          variant="ghost"
-                          onClick={() => {
-                            setSelectedContentId(content.id);
-                            setAssignDialogOpen(true);
-                          }}
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button 
-                          size="icon-sm" 
-                          variant="ghost"
-                          onClick={() => deleteContent(content.id)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Content Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="pending" className="gap-2">
+              <div className="w-2 h-2 rounded-full bg-warning" />
+              Pending
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-secondary text-xs">
+                {pendingContents.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="assigned" className="gap-2">
+              <div className="w-2 h-2 rounded-full bg-primary" />
+              Assigned
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-secondary text-xs">
+                {assignedContents.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="trash" className="gap-2">
+              <Trash2 className="w-3.5 h-3.5" />
+              Trash
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-secondary text-xs">
+                {removedContents.length}
+              </span>
+            </TabsTrigger>
+          </TabsList>
           
-          {/* Assigned/Scheduled Content */}
-          <div className="glass rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold flex items-center gap-2 text-sm">
-                <div className="w-2 h-2 rounded-full bg-primary" />
-                Assigned ({assignedContents.length})
-              </h2>
-            </div>
-            
-            {assignedContents.length === 0 ? (
-              <div className="text-center py-6 text-muted-foreground">
-                <Calendar className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No assigned content</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[280px] overflow-y-auto scrollbar-thin">
-                {assignedContents.map(content => {
-                  const profile = getProfileById(content.assignedProfileId);
-                  return (
+          {/* Pending Tab */}
+          <TabsContent value="pending" className="mt-4">
+            <div className="glass rounded-xl p-4">
+              {pendingContents.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <FileVideo className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="font-medium">No pending content</p>
+                  <p className="text-sm">Upload videos to get started</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {pendingContents.map(content => (
                     <div 
                       key={content.id}
-                      className="p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
+                      className="p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors group"
                     >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <FileVideo className="w-4 h-4 text-primary flex-shrink-0" />
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <FileVideo className="w-5 h-5 text-primary flex-shrink-0" />
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium text-sm truncate" title={content.fileName}>
+                            <p className="font-medium truncate" title={content.fileName}>
                               {content.fileName}
                             </p>
-                            {profile && (
-                              <div className="flex items-center gap-1 mt-0.5">
-                                <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />
-                                <span className="text-xs text-muted-foreground">{profile.name}</span>
-                                {content.scheduledAt && (
-                                  <span className="text-xs text-primary ml-1">
-                                    • {format(new Date(content.scheduledAt), 'HH:mm')}
-                                  </span>
-                                )}
-                              </div>
+                            <p className="text-sm text-muted-foreground">
+                              {format(new Date(content.uploadedAt), 'MMM d, yyyy HH:mm')}
+                            </p>
+                            {content.caption && (
+                              <p className="text-sm text-muted-foreground truncate mt-1">
+                                {content.caption}
+                              </p>
                             )}
                           </div>
                         </div>
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-xs",
-                          content.status === 'scheduled' 
-                            ? "bg-primary/10 text-primary" 
-                            : "bg-warning/10 text-warning"
-                        )}>
-                          {content.status === 'scheduled' ? 'Scheduled' : 'Assigned'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => openAssignDialog(content.id)}
+                          >
+                            <Send className="w-4 h-4 mr-1" />
+                            Assign
+                          </Button>
+                          <Button 
+                            size="icon-sm" 
+                            variant="ghost"
+                            onClick={() => deleteContent(content.id)}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          
-          {/* Trash Content */}
-          <div className="glass rounded-xl p-4 border border-orange-200 bg-orange-50/50">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold flex items-center gap-2 text-sm text-orange-800">
-                <Trash2 className="w-4 h-4" />
-                Trash ({removedContents.length})
-              </h2>
+                  ))}
+                </div>
+              )}
             </div>
-            
-            {removedContents.length === 0 ? (
-              <div className="text-center py-6 text-muted-foreground">
-                <Trash2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No removed content</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[280px] overflow-y-auto scrollbar-thin">
-                {removedContents.map(content => {
-                  const profile = content.removedFromProfileId 
-                    ? getProfileById(content.removedFromProfileId) 
-                    : null;
-                  return (
-                    <div 
-                      key={content.id}
-                      className="p-3 rounded-lg bg-white hover:bg-orange-50 transition-colors group border border-orange-100"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <FileVideo className="w-4 h-4 text-orange-600 flex-shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-sm truncate" title={content.fileName}>
-                              {content.fileName}
-                            </p>
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          </TabsContent>
+          
+          {/* Assigned Tab */}
+          <TabsContent value="assigned" className="mt-4">
+            <div className="glass rounded-xl p-4">
+              {assignedContents.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="font-medium">No assigned content</p>
+                  <p className="text-sm">Assign pending content to profiles</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {assignedContents.map(content => {
+                    const profile = getProfileById(content.assignedProfileId);
+                    return (
+                      <div 
+                        key={content.id}
+                        onClick={() => handleAssignedContentClick(content)}
+                        className="p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <FileVideo className="w-5 h-5 text-primary flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium truncate" title={content.fileName}>
+                                {content.fileName}
+                              </p>
                               {profile && (
-                                <>
+                                <div className="flex items-center gap-2 mt-1">
                                   <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />
-                                  <span>{profile.name}</span>
-                                </>
+                                  <span className="text-sm text-muted-foreground">{profile.name}</span>
+                                  {content.scheduledAt && (
+                                    <span className="text-sm text-primary">
+                                      • {format(new Date(content.scheduledAt), 'MMM d, HH:mm')}
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button 
-                            size="icon-sm" 
-                            variant="ghost"
-                            onClick={() => handleRestore(content.id)}
-                            title="Restore"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5 text-primary" />
-                          </Button>
-                          <Button 
-                            size="icon-sm" 
-                            variant="ghost"
-                            onClick={() => handlePermanentDelete(content.id)}
-                            title="Delete permanently"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                          </Button>
+                          <span className={cn(
+                            "px-3 py-1 rounded-full text-xs font-medium",
+                            content.status === 'scheduled' 
+                              ? "bg-primary/10 text-primary" 
+                              : "bg-warning/10 text-warning"
+                          )}>
+                            {content.status === 'scheduled' ? 'Scheduled' : 'Assigned'}
+                          </span>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground mt-4 text-center">
+                💡 Click on assigned content to go to schedule
+              </p>
+            </div>
+          </TabsContent>
+          
+          {/* Trash Tab */}
+          <TabsContent value="trash" className="mt-4">
+            <div className="glass rounded-xl p-4 border border-orange-200 bg-orange-50/50">
+              {removedContents.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Trash2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="font-medium">Trash is empty</p>
+                  <p className="text-sm">Removed content will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {removedContents.map(content => {
+                    const profile = content.removedFromProfileId 
+                      ? getProfileById(content.removedFromProfileId) 
+                      : null;
+                    return (
+                      <div 
+                        key={content.id}
+                        className="p-4 rounded-lg bg-white hover:bg-orange-50 transition-colors group border border-orange-100"
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <FileVideo className="w-5 h-5 text-orange-600 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium truncate" title={content.fileName}>
+                                {content.fileName}
+                              </p>
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                {profile && (
+                                  <>
+                                    <span>Removed from:</span>
+                                    <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />
+                                    <span>{profile.name}</span>
+                                  </>
+                                )}
+                                {content.removedAt && (
+                                  <span className="ml-2">
+                                    • {format(new Date(content.removedAt), 'MMM d, HH:mm')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => openAssignDialog(content.id, true)}
+                            >
+                              <Send className="w-4 h-4 mr-1" />
+                              Assign
+                            </Button>
+                            <Button 
+                              size="icon-sm" 
+                              variant="ghost"
+                              onClick={() => handlePermanentDelete(content.id)}
+                              title="Delete permanently"
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
         
         {/* Assign Dialog */}
         <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
@@ -354,18 +408,38 @@ export default function ContentPage() {
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {profiles.map(profile => (
-                    <button
-                      key={profile.id}
-                      onClick={() => handleAssign(profile.id)}
-                      className="w-full p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors flex items-center justify-between"
-                    >
-                      <span className="font-medium">{profile.name}</span>
-                      <PlatformBadge platform={profile.platform} size="sm" />
-                    </button>
-                  ))}
+                  {profiles.map(profile => {
+                    const hasSlots = getProfileHasSlots(profile.id);
+                    return (
+                      <button
+                        key={profile.id}
+                        onClick={() => handleAssign(profile.id)}
+                        disabled={!hasSlots}
+                        className={cn(
+                          "w-full p-4 rounded-lg transition-colors flex items-center justify-between",
+                          hasSlots 
+                            ? "bg-secondary/50 hover:bg-secondary" 
+                            : "bg-muted/30 opacity-60 cursor-not-allowed"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-medium">{profile.name}</span>
+                          <PlatformBadge platform={profile.platform} size="sm" />
+                        </div>
+                        {!hasSlots && (
+                          <div className="flex items-center gap-1 text-destructive text-sm">
+                            <AlertCircle className="w-4 h-4" />
+                            <span>No time slots</span>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
+              <p className="text-xs text-muted-foreground text-center">
+                Profiles without time slots cannot receive content
+              </p>
             </div>
           </DialogContent>
         </Dialog>

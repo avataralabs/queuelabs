@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { PlatformBadge } from '@/components/common/PlatformBadge';
+import { RemovedContentPanel } from '@/components/content/RemovedContentPanel';
 import { 
   Dialog, 
   DialogContent, 
@@ -249,6 +250,9 @@ export default function ContentPage() {
             )}
           </div>
         </div>
+        
+        {/* Removed Content Trash */}
+        <RemovedContentPanel />
         
         {/* Assign Dialog */}
         <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>

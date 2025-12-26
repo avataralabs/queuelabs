@@ -1,5 +1,6 @@
 import { Platform } from '@/types';
 import { cn } from '@/lib/utils';
+import { PlatformIcon } from './PlatformIcon';
 
 interface PlatformBadgeProps {
   platform: Platform;
@@ -10,19 +11,16 @@ interface PlatformBadgeProps {
 const platformConfig = {
   tiktok: {
     label: 'TikTok',
-    icon: '♪',
     gradient: 'bg-gradient-tiktok',
     textColor: 'text-foreground',
   },
   instagram: {
     label: 'Instagram',
-    icon: '📷',
     gradient: 'bg-gradient-instagram',
     textColor: 'text-foreground',
   },
   youtube: {
     label: 'YouTube',
-    icon: '▶',
     gradient: 'bg-youtube',
     textColor: 'text-foreground',
   },
@@ -32,6 +30,12 @@ const sizeClasses = {
   sm: 'h-6 text-xs px-2',
   md: 'h-8 text-sm px-3',
   lg: 'h-10 text-base px-4',
+};
+
+const iconSizes: Record<string, 'sm' | 'md' | 'lg'> = {
+  sm: 'sm',
+  md: 'md',
+  lg: 'lg',
 };
 
 export function PlatformBadge({ platform, size = 'md', showLabel = true }: PlatformBadgeProps) {
@@ -44,7 +48,7 @@ export function PlatformBadge({ platform, size = 'md', showLabel = true }: Platf
       config.textColor,
       sizeClasses[size]
     )}>
-      <span>{config.icon}</span>
+      <PlatformIcon platform={platform} size={iconSizes[size]} />
       {showLabel && <span>{config.label}</span>}
     </span>
   );

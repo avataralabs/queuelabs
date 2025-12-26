@@ -28,7 +28,11 @@ interface AppState {
   // Scheduled content actions
   scheduleContent: (contentId: string, profileId: string, slotId: string, date: Date, hour: number, minute: number) => void;
   moveScheduledContent: (scheduledContentId: string, newDate: Date, newHour: number, newMinute: number) => void;
+  swapScheduledContents: (scId1: string, scId2: string) => void;
   unscheduleContent: (scheduledContentId: string) => void;
+  removeFromSchedule: (scheduledContentId: string) => void;
+  restoreRemovedContent: (contentId: string) => void;
+  permanentDeleteContent: (contentId: string) => void;
   
   // History actions
   addToHistory: (entry: Omit<UploadHistory, 'id'>) => void;
@@ -40,6 +44,7 @@ interface AppState {
   getScheduledContentForDate: (profileId: string, date: Date) => ScheduledContent[];
   getPendingContents: () => Content[];
   getAssignedContents: () => Content[];
+  getRemovedContents: () => Content[];
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
@@ -258,6 +263,83 @@ export const useAppStore = create<AppState>()(
         };
       }),
       
+      removeFromSchedule: (scheduledContentId) => set((state) => {
+        const sc = state.scheduledContents.find(s => s.id === scheduledContentId);
+        if (!sc) return state;
+        
+        return {
+          scheduledContents: state.scheduledContents.filter(s => s.id !== scheduledContentId),
+          contents: state.contents.map(c => 
+            c.id === sc.contentId 
+              ? { 
+                  ...c, 
+                  status: 'removed' as const, 
+                  scheduledAt: undefined, 
+                  scheduledSlotId: undefined,
+                  removedAt: new Date(),
+                  removedFromProfileId: sc.profileId
+                }
+              : c
+          )
+        };
+      }),
+      
+      swapScheduledContents: (scId1, scId2) => set((state) => {
+        const sc1 = state.scheduledContents.find(s => s.id === scId1);
+        const sc2 = state.scheduledContents.find(s => s.id === scId2);
+        if (!sc1 || !sc2) return state;
+        
+        return {
+          scheduledContents: state.scheduledContents.map(sc => {
+            if (sc.id === scId1) {
+              return { 
+                ...sc, 
+                scheduledDate: sc2.scheduledDate, 
+                hour: sc2.hour, 
+                minute: sc2.minute,
+                slotId: sc2.slotId
+              };
+            }
+            if (sc.id === scId2) {
+              return { 
+                ...sc, 
+                scheduledDate: sc1.scheduledDate, 
+                hour: sc1.hour, 
+                minute: sc1.minute,
+                slotId: sc1.slotId
+              };
+            }
+            return sc;
+          }),
+          contents: state.contents.map(c => {
+            if (c.id === sc1.contentId) {
+              const newDate = new Date(sc2.scheduledDate);
+              newDate.setHours(sc2.hour, sc2.minute, 0, 0);
+              return { ...c, scheduledAt: newDate };
+            }
+            if (c.id === sc2.contentId) {
+              const newDate = new Date(sc1.scheduledDate);
+              newDate.setHours(sc1.hour, sc1.minute, 0, 0);
+              return { ...c, scheduledAt: newDate };
+            }
+            return c;
+          })
+        };
+      }),
+      
+      restoreRemovedContent: (contentId) => set((state) => ({
+        contents: state.contents.map(c => 
+          c.id === contentId 
+            ? { ...c, status: 'pending' as const, removedAt: undefined, removedFromProfileId: undefined, assignedProfileId: undefined }
+            : c
+        )
+      })),
+      
+      permanentDeleteContent: (contentId) => set((state) => ({
+        contents: state.contents.filter(c => c.id !== contentId),
+        scheduledContents: state.scheduledContents.filter(sc => sc.contentId !== contentId),
+      })),
+      
       // History actions
       addToHistory: (entry) => set((state) => ({
         uploadHistory: [...state.uploadHistory, { ...entry, id: generateId() }]
@@ -276,6 +358,7 @@ export const useAppStore = create<AppState>()(
       },
       getPendingContents: () => get().contents.filter(c => c.status === 'pending'),
       getAssignedContents: () => get().contents.filter(c => c.status === 'assigned' || c.status === 'scheduled'),
+      getRemovedContents: () => get().contents.filter(c => c.status === 'removed'),
     }),
     {
       name: 'queuelabs-storage',

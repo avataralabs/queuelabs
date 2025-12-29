@@ -1,4 +1,4 @@
-import { Moon, Sun, Key, LogOut, Settings } from 'lucide-react';
+import { Moon, Sun, Key, LogOut, Settings, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -23,9 +23,6 @@ export function Header() {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
-  // Get user initial from email
-  const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
-
   return (
     <header className="sticky top-0 z-40 flex justify-end items-center gap-3 p-4 bg-background/80 backdrop-blur-sm border-b border-border">
       {/* Theme Toggle - Circular */}
@@ -48,9 +45,9 @@ export function Header() {
           <Button
             variant="ghost"
             size="icon"
-            className="w-10 h-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold text-sm"
+            className="w-10 h-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
           >
-            {userInitial}
+            <User className="w-5 h-5" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56 bg-popover border-border">

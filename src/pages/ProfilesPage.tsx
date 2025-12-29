@@ -4,6 +4,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlatformBadge } from '@/components/common/PlatformBadge';
+import { PlatformIcon } from '@/components/common/PlatformIcon';
 import { Platform } from '@/types';
 import { 
   Dialog, 
@@ -109,19 +110,19 @@ export default function ProfilesPage() {
                     <SelectContent>
                       <SelectItem value="tiktok">
                         <div className="flex items-center gap-2">
-                          <span className="w-4 h-4 rounded bg-gradient-tiktok" />
+                          <PlatformIcon platform="tiktok" size="sm" className="text-[#00f2ea]" />
                           TikTok
                         </div>
                       </SelectItem>
                       <SelectItem value="instagram">
                         <div className="flex items-center gap-2">
-                          <span className="w-4 h-4 rounded bg-gradient-instagram" />
+                          <PlatformIcon platform="instagram" size="sm" className="text-[#E1306C]" />
                           Instagram
                         </div>
                       </SelectItem>
                       <SelectItem value="youtube">
                         <div className="flex items-center gap-2">
-                          <span className="w-4 h-4 rounded bg-youtube" />
+                          <PlatformIcon platform="youtube" size="sm" className="text-[#FF0000]" />
                           YouTube
                         </div>
                       </SelectItem>

@@ -20,14 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Users, Settings, Trash2, Shield, ShieldCheck } from 'lucide-react';
+import { Users, Settings, Trash2, Shield, ShieldCheck, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
 import { PlatformBadge } from '@/components/common/PlatformBadge';
 
 export default function AdminPage() {
   const { user } = useAuth();
-  const { isAdmin, isAdminLoading, allRoles, allRolesLoading, updateRole, deleteUserRole } = useUserRoles();
+  const { isAdmin, isAdminLoading, allRoles, allRolesLoading, updateRole, deleteUserRole, approveUser } = useUserRoles();
   const { profiles, isLoading: profilesLoading } = useProfiles();
   const [activeTab, setActiveTab] = useState('users');
 
@@ -143,28 +143,47 @@ export default function AdminPage() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="border-green-500/50 text-green-500 bg-green-500/10">
-                              Active
-                            </Badge>
+                            {userRole.is_approved ? (
+                              <Badge variant="outline" className="border-green-500/50 text-green-500 bg-green-500/10">
+                                Approved
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="border-yellow-500/50 text-yellow-500 bg-yellow-500/10">
+                                Pending
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             {format(new Date(userRole.created_at), 'MMM d, yyyy')}
                           </TableCell>
                           <TableCell className="text-right">
-                            {!isCurrentUser && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                onClick={() => {
-                                  if (confirm('Are you sure you want to remove this user\'s role?')) {
-                                    deleteUserRole.mutate(userRole.user_id);
-                                  }
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            )}
+                            <div className="flex items-center justify-end gap-2">
+                              {!isCurrentUser && !userRole.is_approved && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-green-500 hover:text-green-600 hover:bg-green-500/10"
+                                  onClick={() => approveUser.mutate(userRole.user_id)}
+                                >
+                                  <CheckCircle className="w-4 h-4 mr-1" />
+                                  Approve
+                                </Button>
+                              )}
+                              {!isCurrentUser && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() => {
+                                    if (confirm('Are you sure you want to remove this user\'s role?')) {
+                                      deleteUserRole.mutate(userRole.user_id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

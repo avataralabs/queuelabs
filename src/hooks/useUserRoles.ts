@@ -10,6 +10,7 @@ export interface UserRole {
   user_id: string;
   role: AppRole;
   created_at: string;
+  is_approved: boolean;
 }
 
 export interface UserWithRole {
@@ -127,6 +128,23 @@ export function useUserRoles() {
     }
   });
 
+  const approveUser = useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await supabase
+        .from('user_roles')
+        .update({ is_approved: true })
+        .eq('user_id', userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allUserRoles'] });
+      toast({ title: 'User approved successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to approve user', description: error.message, variant: 'destructive' });
+    }
+  });
+
   return {
     isAdmin: isAdminQuery.data ?? false,
     isAdminLoading: isAdminQuery.isLoading,
@@ -134,6 +152,7 @@ export function useUserRoles() {
     allRoles: allRolesQuery.data ?? [],
     allRolesLoading: allRolesQuery.isLoading,
     updateRole,
-    deleteUserRole
+    deleteUserRole,
+    approveUser
   };
 }

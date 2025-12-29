@@ -14,7 +14,227 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      contents: {
+        Row: {
+          assigned_profile_id: string | null
+          caption: string | null
+          file_name: string
+          file_size: number | null
+          file_url: string | null
+          id: string
+          removed_at: string | null
+          removed_from_profile_id: string | null
+          scheduled_at: string | null
+          scheduled_slot_id: string | null
+          status: string
+          uploaded_at: string | null
+          user_id: string
+        }
+        Insert: {
+          assigned_profile_id?: string | null
+          caption?: string | null
+          file_name: string
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          removed_at?: string | null
+          removed_from_profile_id?: string | null
+          scheduled_at?: string | null
+          scheduled_slot_id?: string | null
+          status?: string
+          uploaded_at?: string | null
+          user_id: string
+        }
+        Update: {
+          assigned_profile_id?: string | null
+          caption?: string | null
+          file_name?: string
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          removed_at?: string | null
+          removed_from_profile_id?: string | null
+          scheduled_at?: string | null
+          scheduled_slot_id?: string | null
+          status?: string
+          uploaded_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contents_assigned_profile_id_fkey"
+            columns: ["assigned_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          platform: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          platform: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          platform?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      schedule_slots: {
+        Row: {
+          hour: number
+          id: string
+          is_active: boolean | null
+          minute: number
+          profile_id: string
+          type: string
+          user_id: string
+          week_days: number[] | null
+        }
+        Insert: {
+          hour: number
+          id?: string
+          is_active?: boolean | null
+          minute?: number
+          profile_id: string
+          type?: string
+          user_id: string
+          week_days?: number[] | null
+        }
+        Update: {
+          hour?: number
+          id?: string
+          is_active?: boolean | null
+          minute?: number
+          profile_id?: string
+          type?: string
+          user_id?: string
+          week_days?: number[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_slots_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scheduled_contents: {
+        Row: {
+          content_id: string
+          hour: number
+          id: string
+          minute: number
+          profile_id: string
+          scheduled_date: string
+          slot_id: string
+          user_id: string
+        }
+        Insert: {
+          content_id: string
+          hour: number
+          id?: string
+          minute?: number
+          profile_id: string
+          scheduled_date: string
+          slot_id: string
+          user_id: string
+        }
+        Update: {
+          content_id?: string
+          hour?: number
+          id?: string
+          minute?: number
+          profile_id?: string
+          scheduled_date?: string
+          slot_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_contents_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "contents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_contents_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_contents_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upload_history: {
+        Row: {
+          content_id: string | null
+          error_message: string | null
+          id: string
+          profile_id: string | null
+          status: string
+          uploaded_at: string | null
+          user_id: string
+        }
+        Insert: {
+          content_id?: string | null
+          error_message?: string | null
+          id?: string
+          profile_id?: string | null
+          status: string
+          uploaded_at?: string | null
+          user_id: string
+        }
+        Update: {
+          content_id?: string | null
+          error_message?: string | null
+          id?: string
+          profile_id?: string | null
+          status?: string
+          uploaded_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upload_history_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "contents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upload_history_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

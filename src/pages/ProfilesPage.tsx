@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useAppStore } from '@/stores/appStore';
+import { useProfiles, Platform } from '@/hooks/useProfiles';
+import { useScheduleSlots } from '@/hooks/useScheduleSlots';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlatformBadge } from '@/components/common/PlatformBadge';
 import { PlatformIcon } from '@/components/common/PlatformIcon';
-import { Platform } from '@/types';
 import { 
   Dialog, 
   DialogContent, 
@@ -24,7 +24,8 @@ import { Plus, Pencil, Trash2, Users, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function ProfilesPage() {
-  const { profiles, scheduleSlots, addProfile, updateProfile, deleteProfile } = useAppStore();
+  const { profiles, isLoading, addProfile, updateProfile, deleteProfile } = useProfiles();
+  const { slots } = useScheduleSlots();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', platform: 'tiktok' as Platform });
@@ -33,9 +34,9 @@ export default function ProfilesPage() {
     if (!formData.name.trim()) return;
     
     if (editingProfile) {
-      updateProfile(editingProfile, formData);
+      updateProfile.mutate({ id: editingProfile, ...formData });
     } else {
-      addProfile(formData);
+      addProfile.mutate(formData);
     }
     
     setFormData({ name: '', platform: 'tiktok' });
@@ -51,12 +52,12 @@ export default function ProfilesPage() {
   
   const handleDelete = (id: string) => {
     if (confirm('Are you sure you want to delete this profile? All scheduled content will be removed.')) {
-      deleteProfile(id);
+      deleteProfile.mutate(id);
     }
   };
   
   const getSlotCount = (profileId: string) => 
-    scheduleSlots.filter(s => s.profileId === profileId && s.isActive).length;
+    slots.filter(s => s.profile_id === profileId && s.is_active).length;
   
   return (
     <MainLayout>
@@ -138,7 +139,11 @@ export default function ProfilesPage() {
         </div>
         
         {/* Profiles Grid */}
-        {profiles.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : profiles.length === 0 ? (
           <div className="glass rounded-xl p-12 text-center">
             <Users className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
             <h2 className="text-xl font-semibold mb-2">No Profiles Yet</h2>
@@ -179,7 +184,7 @@ export default function ProfilesPage() {
                 
                 <h3 className="text-lg font-semibold mb-1">{profile.name}</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Created {format(new Date(profile.createdAt), 'MMM d, yyyy')}
+                  Created {format(new Date(profile.created_at), 'MMM d, yyyy')}
                 </p>
                 
                 <div className="flex items-center justify-between pt-4 border-t border-border">

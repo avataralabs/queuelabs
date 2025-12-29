@@ -60,16 +60,6 @@ export function Sidebar() {
         })}
       </nav>
       
-      {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="rounded-lg p-4 bg-sidebar-accent/50">
-          <p className="text-xs text-sidebar-foreground/60 mb-2">Storage Used</p>
-          <div className="h-2 bg-sidebar-border rounded-full overflow-hidden">
-            <div className="h-full w-1/3 bg-sidebar-primary rounded-full" />
-          </div>
-          <p className="text-xs text-sidebar-foreground/60 mt-2">2.4 GB / 10 GB</p>
-        </div>
-      </div>
     </aside>
   );
 }

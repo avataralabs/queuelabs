@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAppStore } from '@/stores/appStore';
+import { useScheduleSlots } from '@/hooks/useScheduleSlots';
 import { Button } from '@/components/ui/button';
 import { 
   Select,
@@ -21,7 +21,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export function ScheduleSlotManager({ profileId, onClose }: ScheduleSlotManagerProps) {
-  const { scheduleSlots, addScheduleSlot, updateScheduleSlot, deleteScheduleSlot } = useAppStore();
+  const { slots, addSlot, updateSlot, deleteSlot } = useScheduleSlots(profileId);
   
   const [newSlot, setNewSlot] = useState({
     hour: 12,
@@ -30,16 +30,14 @@ export function ScheduleSlotManager({ profileId, onClose }: ScheduleSlotManagerP
     weekDays: [1, 2, 3, 4, 5] as number[], // Mon-Fri by default
   });
   
-  const profileSlots = scheduleSlots.filter(s => s.profileId === profileId);
-  
   const handleAddSlot = () => {
-    addScheduleSlot({
-      profileId,
+    addSlot.mutate({
+      profile_id: profileId,
       hour: newSlot.hour,
       minute: newSlot.minute,
       type: newSlot.type,
-      weekDays: newSlot.type === 'weekly' ? newSlot.weekDays : undefined,
-      isActive: true,
+      week_days: newSlot.type === 'weekly' ? newSlot.weekDays : null,
+      is_active: true,
     });
   };
   
@@ -128,24 +126,24 @@ export function ScheduleSlotManager({ profileId, onClose }: ScheduleSlotManagerP
             </div>
           )}
           
-          <Button onClick={handleAddSlot} className="w-full" variant="gradient">
+          <Button onClick={handleAddSlot} className="w-full" variant="gradient" disabled={addSlot.isPending}>
             <Plus className="w-4 h-4" />
-            Add Slot
+            {addSlot.isPending ? 'Adding...' : 'Add Slot'}
           </Button>
         </div>
       </div>
       
       {/* Existing Slots */}
       <div>
-        <p className="text-sm font-medium mb-3">Active Slots ({profileSlots.length})</p>
+        <p className="text-sm font-medium mb-3">Active Slots ({slots.length})</p>
         
-        {profileSlots.length === 0 ? (
+        {slots.length === 0 ? (
           <p className="text-center text-muted-foreground py-6">
             No time slots configured
           </p>
         ) : (
           <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin">
-            {profileSlots
+            {slots
               .sort((a, b) => a.hour - b.hour)
               .map(slot => (
                 <div 
@@ -165,9 +163,9 @@ export function ScheduleSlotManager({ profileId, onClose }: ScheduleSlotManagerP
                       )}>
                         {slot.type === 'daily' ? 'Daily' : 'Weekly'}
                       </span>
-                      {slot.type === 'weekly' && slot.weekDays && (
+                      {slot.type === 'weekly' && slot.week_days && (
                         <span className="text-xs text-muted-foreground ml-2">
-                          {slot.weekDays.map(d => DAYS[d]).join(', ')}
+                          {slot.week_days.map(d => DAYS[d]).join(', ')}
                         </span>
                       )}
                     </div>
@@ -175,13 +173,13 @@ export function ScheduleSlotManager({ profileId, onClose }: ScheduleSlotManagerP
                   
                   <div className="flex items-center gap-2">
                     <Switch
-                      checked={slot.isActive}
-                      onCheckedChange={(checked) => updateScheduleSlot(slot.id, { isActive: checked })}
+                      checked={slot.is_active ?? true}
+                      onCheckedChange={(checked) => updateSlot.mutate({ id: slot.id, is_active: checked })}
                     />
                     <Button 
                       variant="ghost" 
                       size="icon-sm"
-                      onClick={() => deleteScheduleSlot(slot.id)}
+                      onClick={() => deleteSlot.mutate(slot.id)}
                     >
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>

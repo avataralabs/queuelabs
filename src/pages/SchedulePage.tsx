@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useAppStore } from '@/stores/appStore';
+import { useProfiles } from '@/hooks/useProfiles';
+import { useScheduleSlots } from '@/hooks/useScheduleSlots';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { PlatformBadge } from '@/components/common/PlatformBadge';
@@ -14,23 +15,28 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight, Calendar, Clock, Settings } from 'lucide-react';
-import { format, addDays, subDays, startOfDay, isToday } from 'date-fns';
-import { cn } from '@/lib/utils';
+import { subDays, addDays, startOfDay, isToday } from 'date-fns';
 
 export default function SchedulePage() {
   const [searchParams] = useSearchParams();
-  const { profiles, scheduleSlots } = useAppStore();
-  const [selectedProfileId, setSelectedProfileId] = useState<string>(profiles[0]?.id || '');
+  const { profiles, isLoading: profilesLoading } = useProfiles();
+  const [selectedProfileId, setSelectedProfileId] = useState<string>('');
   const [baseDate, setBaseDate] = useState(new Date());
   const [showSlotManager, setShowSlotManager] = useState(false);
   
-  // Handle profile from URL param
+  const { slots: profileSlots } = useScheduleSlots(selectedProfileId);
+  
+  // Set initial profile when loaded
   useEffect(() => {
-    const profileParam = searchParams.get('profile');
-    if (profileParam && profiles.some(p => p.id === profileParam)) {
-      setSelectedProfileId(profileParam);
+    if (profiles.length > 0 && !selectedProfileId) {
+      const profileParam = searchParams.get('profile');
+      if (profileParam && profiles.some(p => p.id === profileParam)) {
+        setSelectedProfileId(profileParam);
+      } else {
+        setSelectedProfileId(profiles[0].id);
+      }
     }
-  }, [searchParams, profiles]);
+  }, [profiles, selectedProfileId, searchParams]);
   
   const selectedProfile = profiles.find(p => p.id === selectedProfileId);
   
@@ -48,7 +54,17 @@ export default function SchedulePage() {
     setBaseDate(new Date());
   };
   
-  const profileSlots = scheduleSlots.filter(s => s.profileId === selectedProfileId && s.isActive);
+  const activeSlots = profileSlots.filter(s => s.is_active);
+  
+  if (profilesLoading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </MainLayout>
+    );
+  }
   
   return (
     <MainLayout>
@@ -111,7 +127,7 @@ export default function SchedulePage() {
                   {selectedProfile && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Clock className="w-4 h-4" />
-                      <span>{profileSlots.length} active slots</span>
+                      <span>{activeSlots.length} active slots</span>
                     </div>
                   )}
                 </div>

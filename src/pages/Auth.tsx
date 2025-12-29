@@ -20,20 +20,40 @@ export default function Auth() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
+    const checkApprovalAndRedirect = async (userId: string) => {
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('is_approved')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      if (userRole?.is_approved) {
         navigate('/');
+      } else {
+        // User not approved, sign them out
+        await supabase.auth.signOut();
+        toast({
+          title: 'Account Pending Approval',
+          description: 'Your account is waiting for admin approval. Please wait.',
+          variant: 'destructive'
+        });
+      }
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user && event === 'SIGNED_IN') {
+        checkApprovalAndRedirect(session.user.id);
       }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        navigate('/');
+        checkApprovalAndRedirect(session.user.id);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, toast]);
 
   const validateForm = () => {
     const newErrors: { email?: string; password?: string } = {};

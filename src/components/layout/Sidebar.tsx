@@ -5,12 +5,9 @@ import {
   Users, 
   Calendar, 
   History,
-  Zap,
-  LogOut
+  Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
 
 const navItems = [
   { path: '/', icon: Upload, label: 'Content' },
@@ -22,7 +19,6 @@ const navItems = [
 
 export function Sidebar() {
   const location = useLocation();
-  const { user, signOut } = useAuth();
   
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col z-50">
@@ -63,25 +59,6 @@ export function Sidebar() {
           );
         })}
       </nav>
-      
-      {/* User & Logout */}
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center justify-between">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-sidebar-foreground/60 truncate">
-              {user?.email}
-            </p>
-          </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={signOut}
-            className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-          >
-            <LogOut className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
     </aside>
   );
 }

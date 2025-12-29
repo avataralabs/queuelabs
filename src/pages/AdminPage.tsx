@@ -94,7 +94,7 @@ export default function AdminPage() {
                     <TableHead className="text-muted-foreground">Email</TableHead>
                     <TableHead className="text-muted-foreground">Role</TableHead>
                     <TableHead className="text-muted-foreground">Status</TableHead>
-                    <TableHead className="text-muted-foreground">Joined</TableHead>
+                    <TableHead className="text-muted-foreground">Last Login</TableHead>
                     <TableHead className="text-muted-foreground text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -145,7 +145,7 @@ export default function AdminPage() {
                           <TableCell>
                             {userRole.is_approved ? (
                               <Badge variant="outline" className="border-green-500/50 text-green-500 bg-green-500/10">
-                                Approved
+                                Active
                               </Badge>
                             ) : (
                               <Badge variant="outline" className="border-yellow-500/50 text-yellow-500 bg-yellow-500/10">
@@ -154,19 +154,22 @@ export default function AdminPage() {
                             )}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {format(new Date(userRole.created_at), 'MMM d, yyyy')}
+                            {userRole.last_sign_in_at 
+                              ? format(new Date(userRole.last_sign_in_at), 'MMM d, yyyy HH:mm')
+                              : 'Never'
+                            }
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-1">
                               {!isCurrentUser && !userRole.is_approved && (
                                 <Button
-                                  variant="outline"
-                                  size="sm"
+                                  variant="ghost"
+                                  size="icon"
                                   className="text-green-500 hover:text-green-600 hover:bg-green-500/10"
                                   onClick={() => approveUser.mutate(userRole.user_id)}
+                                  title="Approve user"
                                 >
-                                  <CheckCircle className="w-4 h-4 mr-1" />
-                                  Approve
+                                  <CheckCircle className="w-4 h-4" />
                                 </Button>
                               )}
                               {!isCurrentUser && (
@@ -179,6 +182,7 @@ export default function AdminPage() {
                                       deleteUserRole.mutate(userRole.user_id);
                                     }
                                   }}
+                                  title="Delete user role"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </Button>

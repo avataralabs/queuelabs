@@ -187,16 +187,9 @@ export default function ProfilesPage() {
                   Created {format(new Date(profile.created_at), 'MMM d, yyyy')}
                 </p>
                 
-                <div className="flex items-center justify-between pt-4 border-t border-border">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Clock className="w-4 h-4" />
-                    <span>{getSlotCount(profile.id)} time slots</span>
-                  </div>
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={`/schedule?profile=${profile.id}`}>
-                      Manage Time Slot
-                    </a>
-                  </Button>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground pt-4 border-t border-border">
+                  <Clock className="w-4 h-4" />
+                  <span>{getSlotCount(profile.id)} time slots</span>
                 </div>
               </div>
             ))}

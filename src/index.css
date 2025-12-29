@@ -75,6 +75,17 @@
     --sidebar-accent-foreground: 210 20% 98%;
     --sidebar-border: 220 30% 25%;
     --sidebar-ring: 220 70% 55%;
+
+    /* Auth Page Colors */
+    --auth-background: 240 20% 8%;
+    --auth-card: 240 15% 13%;
+    --auth-border: 240 10% 20%;
+    --auth-input: 240 15% 18%;
+    --auth-foreground: 0 0% 98%;
+    --auth-muted: 240 10% 50%;
+    --auth-accent: 185 100% 50%;
+    --auth-button: 262 83% 58%;
+    --auth-tab-active: 240 20% 8%;
   }
 
   .dark {
@@ -135,6 +146,43 @@
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
+  }
+
+  /* Auth Page Utilities */
+  .bg-auth-background {
+    background: linear-gradient(180deg, hsl(var(--auth-background)) 0%, hsl(240 25% 6%) 100%);
+  }
+
+  .bg-auth-card {
+    background-color: hsl(var(--auth-card));
+  }
+
+  .border-auth-border {
+    border-color: hsl(var(--auth-border));
+  }
+
+  .bg-auth-input {
+    background-color: hsl(var(--auth-input));
+  }
+
+  .text-auth-foreground {
+    color: hsl(var(--auth-foreground));
+  }
+
+  .text-auth-muted {
+    color: hsl(var(--auth-muted));
+  }
+
+  .text-auth-accent {
+    color: hsl(var(--auth-accent));
+  }
+
+  .bg-auth-button {
+    background: linear-gradient(135deg, hsl(var(--auth-button)) 0%, hsl(262 83% 48%) 100%);
+  }
+
+  .bg-auth-tab-active {
+    background-color: hsl(var(--auth-tab-active));
   }
 
   .timeline-slot {

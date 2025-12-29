@@ -123,28 +123,28 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-auth-background">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/30">
       <div className="w-full max-w-md px-6">
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <Sparkles className="w-8 h-8 text-auth-accent" />
-            <h1 className="text-3xl font-bold text-auth-accent">QueueLabs</h1>
+            <Sparkles className="w-8 h-8 text-primary" />
+            <h1 className="text-3xl font-bold text-primary">QueueLabs</h1>
           </div>
-          <p className="text-auth-muted">Your Auto Upload System</p>
+          <p className="text-muted-foreground">Your Auto Upload System</p>
         </div>
 
         {/* Card */}
-        <div className="bg-auth-card rounded-2xl p-8 border border-auth-border">
+        <div className="glass rounded-2xl p-8">
           {/* Tab Switcher */}
-          <div className="flex bg-auth-input rounded-lg p-1 mb-6">
+          <div className="flex bg-secondary rounded-lg p-1 mb-6">
             <button
               type="button"
               onClick={() => setIsSignUp(false)}
               className={`flex-1 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
                 !isSignUp 
-                  ? 'bg-auth-tab-active text-auth-foreground' 
-                  : 'text-auth-muted hover:text-auth-foreground'
+                  ? 'bg-background text-foreground shadow-sm' 
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               Sign In
@@ -154,8 +154,8 @@ export default function Auth() {
               onClick={() => setIsSignUp(true)}
               className={`flex-1 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
                 isSignUp 
-                  ? 'bg-auth-tab-active text-auth-foreground' 
-                  : 'text-auth-muted hover:text-auth-foreground'
+                  ? 'bg-background text-foreground shadow-sm' 
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               Sign Up
@@ -173,10 +173,10 @@ export default function Auth() {
                   setEmail(e.target.value);
                   if (errors.email) setErrors(prev => ({ ...prev, email: undefined }));
                 }}
-                className="bg-auth-input border-auth-border text-auth-foreground placeholder:text-auth-muted h-12"
+                className="h-12"
               />
               {errors.email && (
-                <p className="text-red-400 text-xs mt-1">{errors.email}</p>
+                <p className="text-destructive text-xs mt-1">{errors.email}</p>
               )}
             </div>
             <div>
@@ -188,17 +188,17 @@ export default function Auth() {
                   setPassword(e.target.value);
                   if (errors.password) setErrors(prev => ({ ...prev, password: undefined }));
                 }}
-                className="bg-auth-input border-auth-border text-auth-foreground placeholder:text-auth-muted h-12"
+                className="h-12"
               />
               {errors.password && (
-                <p className="text-red-400 text-xs mt-1">{errors.password}</p>
+                <p className="text-destructive text-xs mt-1">{errors.password}</p>
               )}
             </div>
 
             <Button 
               type="submit" 
               disabled={loading}
-              className="w-full h-12 bg-auth-button hover:opacity-90 text-white font-medium"
+              className="w-full h-12 font-medium"
             >
               {loading ? 'Loading...' : isSignUp ? 'Create Account' : 'Sign In'}
             </Button>
@@ -206,8 +206,8 @@ export default function Auth() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-auth-muted text-sm mt-8">
-          Powered by <span className="text-auth-accent">QueueLabs</span>
+        <p className="text-center text-muted-foreground text-sm mt-8">
+          Powered by <span className="text-primary font-medium">QueueLabs</span>
         </p>
       </div>
     </div>

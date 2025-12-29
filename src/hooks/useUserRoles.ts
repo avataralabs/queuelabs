@@ -11,6 +11,7 @@ export interface UserRole {
   role: AppRole;
   created_at: string;
   is_approved: boolean;
+  last_sign_in_at?: string | null;
 }
 
 export interface UserWithRole {
@@ -63,7 +64,7 @@ export function useUserRoles() {
     enabled: !!user
   });
 
-  // Get all user roles (admin only)
+  // Get all user roles with last_sign_in_at (admin only)
   const allRolesQuery = useQuery({
     queryKey: ['allUserRoles'],
     queryFn: async () => {
@@ -73,7 +74,20 @@ export function useUserRoles() {
         .order('created_at', { ascending: true });
       
       if (error) throw error;
-      return data as UserRole[];
+      
+      // Fetch last_sign_in_at for each user
+      const rolesWithLastSignIn = await Promise.all(
+        (data as UserRole[]).map(async (role) => {
+          const { data: lastSignIn } = await supabase
+            .rpc('get_user_last_sign_in', { _user_id: role.user_id });
+          return {
+            ...role,
+            last_sign_in_at: lastSignIn as string | null
+          };
+        })
+      );
+      
+      return rolesWithLastSignIn;
     },
     enabled: isAdminQuery.data === true
   });

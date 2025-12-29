@@ -39,6 +39,15 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const { isAdmin, isAdminLoading } = useUserRoles();
   
+  // Debug logging
+  console.log('AdminRoute state:', { 
+    userEmail: user?.email, 
+    loading, 
+    isAdmin, 
+    isAdminLoading 
+  });
+  
+  // Wait for all loading states to complete
   if (loading || isAdminLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -51,7 +60,9 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/auth" replace />;
   }
   
+  // Only redirect if query is complete and user is definitely not admin
   if (!isAdmin) {
+    console.log('AdminRoute: User is not admin, redirecting to /');
     return <Navigate to="/" replace />;
   }
   

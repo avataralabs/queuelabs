@@ -41,7 +41,9 @@ export function useUserRoles() {
       }
       return data ?? false;
     },
-    enabled: !!user
+    enabled: !!user,
+    staleTime: 1000 * 60 * 5,  // 5 minutes - data stays fresh
+    gcTime: 1000 * 60 * 10,   // 10 minutes - cache retention
   });
 
   // Get current user's role

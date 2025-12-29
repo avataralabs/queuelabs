@@ -12,17 +12,24 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { useTheme } from 'next-themes';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { ChangePasswordDialog } from '@/components/ChangePasswordDialog';
 
 export function Header() {
   const { user, signOut } = useAuth();
   const { isAdmin } = useUserRoles();
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
+
+  const handleAdminNavigation = () => {
+    setTimeout(() => {
+      navigate('/admin');
+    }, 100);
   };
 
   return (
@@ -61,11 +68,12 @@ export function Header() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-border" />
             {isAdmin && (
-              <DropdownMenuItem asChild className="cursor-pointer py-2.5">
-                <Link to="/admin" className="flex items-center w-full">
-                  <Settings className="w-4 h-4 mr-3" />
-                  Admin Panel
-                </Link>
+              <DropdownMenuItem 
+                className="cursor-pointer py-2.5"
+                onSelect={handleAdminNavigation}
+              >
+                <Settings className="w-4 h-4 mr-3" />
+                Admin Panel
               </DropdownMenuItem>
             )}
             <DropdownMenuItem 

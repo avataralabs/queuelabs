@@ -62,15 +62,13 @@ export function Header() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-border" />
             {isAdmin && (
-              <>
-                <DropdownMenuItem 
-                  className="cursor-pointer py-2.5"
-                  onClick={() => navigate('/admin')}
-                >
-                  <Settings className="w-4 h-4 mr-3" />
-                  Admin Panel
-                </DropdownMenuItem>
-              </>
+              <DropdownMenuItem 
+                className="cursor-pointer py-2.5"
+                onSelect={() => navigate('/admin')}
+              >
+                <Settings className="w-4 h-4 mr-3" />
+                Admin Panel
+              </DropdownMenuItem>
             )}
             <DropdownMenuItem 
               className="cursor-pointer py-2.5"

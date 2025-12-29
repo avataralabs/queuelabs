@@ -1,4 +1,4 @@
-import { Moon, Sun, User, Key, LogOut } from 'lucide-react';
+import { Moon, Sun, Key, LogOut, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -9,24 +9,31 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserRoles } from '@/hooks/useUserRoles';
 import { useTheme } from 'next-themes';
+import { useNavigate } from 'react-router-dom';
 
 export function Header() {
   const { user, signOut } = useAuth();
+  const { isAdmin } = useUserRoles();
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
+  // Get user initial from email
+  const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
+
   return (
-    <header className="sticky top-0 z-40 flex justify-end items-center gap-2 p-4 bg-background/80 backdrop-blur-sm border-b border-border">
-      {/* Theme Toggle */}
+    <header className="sticky top-0 z-40 flex justify-end items-center gap-3 p-4 bg-background/80 backdrop-blur-sm border-b border-border">
+      {/* Theme Toggle - Circular */}
       <Button
         variant="ghost"
         size="icon"
         onClick={toggleTheme}
-        className="text-muted-foreground hover:text-foreground"
+        className="w-10 h-10 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
       >
         {theme === 'dark' ? (
           <Sun className="w-5 h-5" />
@@ -35,34 +42,45 @@ export function Header() {
         )}
       </Button>
 
-      {/* Profile Dropdown */}
+      {/* Profile Avatar - Circular */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className="text-muted-foreground hover:text-foreground"
+            className="w-10 h-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 font-semibold text-sm"
           >
-            <User className="w-5 h-5" />
+            {userInitial}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56 bg-popover">
-          <DropdownMenuLabel className="font-normal">
-            <p className="text-xs text-muted-foreground truncate">
+        <DropdownMenuContent align="end" className="w-56 bg-popover border-border">
+          <DropdownMenuLabel className="font-normal py-3">
+            <p className="text-sm font-medium truncate">
               {user?.email}
             </p>
           </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem className="cursor-pointer">
-            <Key className="w-4 h-4 mr-2" />
+          <DropdownMenuSeparator className="bg-border" />
+          {isAdmin && (
+            <>
+              <DropdownMenuItem 
+                className="cursor-pointer py-2.5"
+                onClick={() => navigate('/admin')}
+              >
+                <Settings className="w-4 h-4 mr-3" />
+                Admin Panel
+              </DropdownMenuItem>
+            </>
+          )}
+          <DropdownMenuItem className="cursor-pointer py-2.5">
+            <Key className="w-4 h-4 mr-3" />
             Change Password
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
+          <DropdownMenuSeparator className="bg-border" />
           <DropdownMenuItem 
-            className="cursor-pointer text-destructive focus:text-destructive"
+            className="cursor-pointer py-2.5 text-destructive focus:text-destructive focus:bg-destructive/10"
             onClick={signOut}
           >
-            <LogOut className="w-4 h-4 mr-2" />
+            <LogOut className="w-4 h-4 mr-3" />
             Sign Out
           </DropdownMenuItem>
         </DropdownMenuContent>

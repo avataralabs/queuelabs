@@ -13,7 +13,7 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, Users, Clock, Link, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
+import { Plus, Trash2, Users, Clock, Link, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -58,11 +58,6 @@ export default function ProfilesPage() {
     setDialogOpen(false);
   };
   
-  const handleEdit = (profile: typeof profiles[0]) => {
-    setFormData({ name: profile.name, platform: profile.platform });
-    setEditingProfile(profile.id);
-    setDialogOpen(true);
-  };
   
   const handleDelete = (id: string) => {
     if (confirm('Are you sure you want to delete this profile? All scheduled content will be removed.')) {
@@ -170,7 +165,6 @@ export default function ProfilesPage() {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <PlatformBadge platform={profile.platform} />
                     {isConnected(profile) ? (
                       <Badge variant="outline" className="text-green-500 border-green-500/30 bg-green-500/10">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -187,17 +181,17 @@ export default function ProfilesPage() {
                     <Button 
                       size="icon-sm" 
                       variant="ghost"
-                      onClick={() => handleEdit(profile)}
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button 
-                      size="icon-sm" 
-                      variant="ghost"
                       onClick={() => handleDelete(profile.id)}
                     >
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
+                  </div>
+                </div>
+                
+                {/* Platform icon - circular */}
+                <div className="mb-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#25F4EE] via-[#FE2C55] to-[#000000] flex items-center justify-center">
+                    <PlatformIcon platform={profile.platform} size="md" className="text-white" />
                   </div>
                 </div>
                 

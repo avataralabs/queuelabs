@@ -242,12 +242,11 @@ export function useProfiles() {
         username: ''
       }));
 
-      // Update profile with new access URL and connected accounts
+      // Update profile with new access URL and connected accounts (tanpa expires_at)
       await supabase
         .from('profiles')
         .update({
           access_url: data.access_url,
-          access_url_expires_at: data.expires_at,
           connected_accounts: connectedAccounts as unknown as Json
         })
         .eq('id', profileId);
@@ -262,27 +261,6 @@ export function useProfiles() {
     }
   });
 
-  // Fetch access_url langsung dari database (bukan cache)
-  const fetchAccessUrl = async (profileId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('access_url, access_url_expires_at')
-      .eq('id', profileId)
-      .maybeSingle();
-    
-    if (error) throw error;
-    return data;
-  };
-
-  // Clear expired access_url from database
-  const clearExpiredAccessUrl = async (profileId: string) => {
-    await supabase
-      .from('profiles')
-      .update({ access_url: null, access_url_expires_at: null })
-      .eq('id', profileId);
-    queryClient.invalidateQueries({ queryKey: ['profiles'] });
-  };
-
   return {
     profiles: query.data ?? [],
     isLoading: query.isLoading,
@@ -290,8 +268,6 @@ export function useProfiles() {
     updateProfile,
     deleteProfile,
     syncAccounts,
-    regenerateAccessUrl,
-    fetchAccessUrl,
-    clearExpiredAccessUrl
+    regenerateAccessUrl
   };
 }

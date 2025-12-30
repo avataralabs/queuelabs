@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 
 export default function ProfilesPage() {
-  const { profiles, isLoading, addProfile, updateProfile, deleteProfile, syncAccounts, regenerateAccessUrl, fetchAccessUrl } = useProfiles();
+  const { profiles, isLoading, addProfile, updateProfile, deleteProfile, syncAccounts, regenerateAccessUrl } = useProfiles();
   const { slots } = useScheduleSlots();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<string | null>(null);
@@ -66,44 +66,20 @@ export default function ProfilesPage() {
     }
   };
 
-  const handleConnectAccount = async (profileId: string) => {
+  const handleConnectAccount = (profileId: string) => {
     setConnectingProfileId(profileId);
     
-    try {
-      // Step 1: Cek database langsung (bukan cache)
-      const profileData = await fetchAccessUrl(profileId);
-      
-      // Step 2: Cek apakah access_url valid dan belum expired
-      const isValid = profileData?.access_url && 
-        profileData?.access_url_expires_at && 
-        new Date(profileData.access_url_expires_at) > new Date();
-      
-      if (isValid) {
-        // Langsung buka popup dengan URL dari database
-        window.open(profileData.access_url, 'connect-account', 'width=600,height=700,scrollbars=yes');
-        setConnectingProfileId(null);
-        return;
-      }
-      
-      // Step 3: Jika tidak valid, regenerate
-      regenerateAccessUrl.mutate(profileId, {
-        onSuccess: async () => {
-          // Step 4: Query database lagi untuk ambil URL baru
-          const newData = await fetchAccessUrl(profileId);
-          if (newData?.access_url) {
-            window.open(newData.access_url, 'connect-account', 'width=600,height=700,scrollbars=yes');
-          }
-          setConnectingProfileId(null);
-        },
-        onError: () => {
-          setConnectingProfileId(null);
+    regenerateAccessUrl.mutate(profileId, {
+      onSuccess: (accessUrl) => {
+        if (accessUrl) {
+          window.open(accessUrl, 'connect-account', 'width=600,height=700,scrollbars=yes');
         }
-      });
-    } catch (error) {
-      console.error('Error connecting account:', error);
-      toast({ title: 'Failed to connect account', variant: 'destructive' });
-      setConnectingProfileId(null);
-    }
+        setConnectingProfileId(null);
+      },
+      onError: () => {
+        setConnectingProfileId(null);
+      }
+    });
   };
   
   const getSlotCount = (profileId: string) => 
@@ -111,11 +87,6 @@ export default function ProfilesPage() {
 
   const isConnected = (profile: typeof profiles[0]) => {
     return profile.connected_accounts && profile.connected_accounts.length > 0;
-  };
-
-  const isAccessUrlExpired = (profile: typeof profiles[0]) => {
-    if (!profile.access_url_expires_at) return true;
-    return new Date(profile.access_url_expires_at) < new Date();
   };
 
   

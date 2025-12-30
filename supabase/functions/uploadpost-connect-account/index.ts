@@ -68,16 +68,31 @@ Deno.serve(async (req) => {
     const hours = durationMatch ? parseInt(durationMatch[1]) : 48;
     expiresAt.setHours(expiresAt.getHours() + hours);
 
+    // Parse connected platforms from social_accounts
+    const socialAccounts = result.profile?.social_accounts || {};
+    const connectedPlatforms: string[] = [];
+    const platformOrder = ['tiktok', 'instagram', 'youtube'];
+    
+    for (const platform of platformOrder) {
+      const accountData = socialAccounts[platform];
+      // Check if platform has actual data (not empty string, not null/undefined)
+      if (accountData && typeof accountData === 'object' && Object.keys(accountData).length > 0) {
+        connectedPlatforms.push(platform);
+      }
+    }
+
     console.log('Connect account successful:', {
       access_url: result.access_url,
       duration: result.duration,
-      expires_at: expiresAt.toISOString()
+      expires_at: expiresAt.toISOString(),
+      connected_platforms: connectedPlatforms
     });
 
     return new Response(
       JSON.stringify({
         access_url: result.access_url,
-        expires_at: expiresAt.toISOString()
+        expires_at: expiresAt.toISOString(),
+        connected_platforms: connectedPlatforms
       }),
       {
         status: 200,

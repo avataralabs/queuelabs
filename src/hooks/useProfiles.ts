@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
+import type { Json } from '@/integrations/supabase/types';
 
 export type Platform = 'tiktok' | 'instagram' | 'youtube';
 
@@ -235,12 +236,19 @@ export function useProfiles() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      // Update profile with new access URL
+      // Transform connected_platforms to ConnectedAccount format
+      const connectedAccounts: ConnectedAccount[] = (data.connected_platforms || []).map((platform: string) => ({
+        platform,
+        username: ''
+      }));
+
+      // Update profile with new access URL and connected accounts
       await supabase
         .from('profiles')
         .update({
           access_url: data.access_url,
-          access_url_expires_at: data.expires_at
+          access_url_expires_at: data.expires_at,
+          connected_accounts: connectedAccounts as unknown as Json
         })
         .eq('id', profileId);
 

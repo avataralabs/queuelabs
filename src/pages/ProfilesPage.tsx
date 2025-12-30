@@ -188,13 +188,6 @@ export default function ProfilesPage() {
                   </div>
                 </div>
                 
-                {/* Platform icon - circular */}
-                <div className="mb-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#25F4EE] via-[#FE2C55] to-[#000000] flex items-center justify-center">
-                    <PlatformIcon platform={profile.platform} size="md" className="text-white" />
-                  </div>
-                </div>
-                
                 <h3 className="text-lg font-semibold mb-1">{profile.name}</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   Created {format(new Date(profile.created_at), 'MMM d, yyyy')}

@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.uploadpost-get-accounts]
 verify_jwt = false
+
+[functions.uploadpost-delete-profile]
+verify_jwt = true

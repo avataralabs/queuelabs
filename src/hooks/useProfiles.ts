@@ -254,26 +254,16 @@ export function useProfiles() {
     }
   });
 
-  // Open connect popup window
-  const openConnectPopup = async (profileId: string): Promise<boolean> => {
-    const profile = query.data?.find(p => p.id === profileId);
-    if (!profile) {
-      toast({ title: 'Profile not found', variant: 'destructive' });
-      return false;
-    }
-
-    // Check if access_url exists and is valid (not expired)
-    if (profile.access_url && profile.access_url_expires_at) {
-      const expiresAt = new Date(profile.access_url_expires_at);
-      if (expiresAt > new Date()) {
-        // URL is valid, open popup
-        window.open(profile.access_url, 'connect-account', 'width=600,height=700,scrollbars=yes');
-        return true;
-      }
-    }
-
-    // URL is expired or doesn't exist, need to regenerate
-    return false;
+  // Fetch access_url langsung dari database (bukan cache)
+  const fetchAccessUrl = async (profileId: string) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('access_url, access_url_expires_at')
+      .eq('id', profileId)
+      .maybeSingle();
+    
+    if (error) throw error;
+    return data;
   };
 
   // Clear expired access_url from database
@@ -293,7 +283,7 @@ export function useProfiles() {
     deleteProfile,
     syncAccounts,
     regenerateAccessUrl,
-    openConnectPopup,
+    fetchAccessUrl,
     clearExpiredAccessUrl
   };
 }

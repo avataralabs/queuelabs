@@ -178,11 +178,11 @@ export default function AdminPage() {
                                   size="icon"
                                   className="text-destructive hover:text-destructive hover:bg-destructive/10"
                                   onClick={() => {
-                                    if (confirm('Are you sure you want to remove this user\'s role?')) {
+                                    if (confirm('Are you sure you want to delete this user?')) {
                                       deleteUserRole.mutate(userRole.user_id);
                                     }
                                   }}
-                                  title="Delete user role"
+                                  title="Delete user"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </Button>

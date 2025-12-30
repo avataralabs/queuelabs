@@ -141,7 +141,7 @@ export function useUserRoles() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['allUserRoles'] });
-      toast({ title: 'User role deleted' });
+      toast({ title: 'User deleted' });
     },
     onError: (error: Error) => {
       toast({ title: 'Failed to delete role', description: error.message, variant: 'destructive' });

@@ -167,7 +167,7 @@ export default function SchedulePage() {
                     <SelectTrigger className="w-[280px]">
                       {selectedProfile && selectedPlatform ? (
                         <div className="flex items-center gap-2">
-                          <PlatformBadge platform={selectedPlatform} size="sm" showLabel={false} />
+                          <PlatformBadge platform={selectedPlatform} size="sm" showLabel={false} variant="icon" />
                           <span>{selectedProfile.name}</span>
                         </div>
                       ) : (
@@ -181,7 +181,7 @@ export default function SchedulePage() {
                           value={`${item.profileId}|${item.platform}`}
                         >
                           <div className="flex items-center gap-2">
-                            <PlatformBadge platform={item.platform} size="sm" showLabel={false} />
+                            <PlatformBadge platform={item.platform} size="sm" showLabel={false} variant="icon" />
                             <span>{item.profileName}</span>
                           </div>
                         </SelectItem>

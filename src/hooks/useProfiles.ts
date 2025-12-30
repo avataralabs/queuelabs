@@ -54,15 +54,12 @@ export function useProfiles() {
     mutationFn: async ({ name }: { name: string }) => {
       if (!user) throw new Error('Not authenticated');
       
-      // Generate unique username for Upload-Post
-      const uploadpostUsername = `queuelabs_${user.id.slice(0, 8)}_${Date.now()}`;
-      
-      // 1. Call Edge Function to create profile via webhook
+      // 1. Call Edge Function to create profile via webhook with user's name
       const { data: uploadpostData, error: fnError } = await supabase.functions.invoke(
         'uploadpost-create-profile',
         {
           body: {
-            username: uploadpostUsername
+            username: name
           }
         }
       );
@@ -78,14 +75,14 @@ export function useProfiles() {
         throw new Error(errorMessage);
       }
       
-      // 2. Save to database
+      // 2. Save to database with user's name as uploadpost_username
       const { data, error } = await supabase
         .from('profiles')
         .insert({
           name,
           platform: 'tiktok', // Default platform
           user_id: user.id,
-          uploadpost_username: uploadpostUsername,
+          uploadpost_username: name,
           access_url: uploadpostData?.access_url,
           access_url_expires_at: uploadpostData?.expires_at
         })

@@ -14,6 +14,10 @@ serve(async (req) => {
 
   try {
     const apiKey = Deno.env.get('UPLOADPOST_API_KEY');
+    console.log('API Key exists:', !!apiKey);
+    console.log('API Key length:', apiKey?.length);
+    console.log('API Key prefix:', apiKey?.substring(0, 8) + '...');
+    
     if (!apiKey) {
       console.error('UPLOADPOST_API_KEY not configured');
       throw new Error('Upload-Post API key not configured');
@@ -38,6 +42,11 @@ serve(async (req) => {
 
     // If user already exists, that's okay - continue to generate JWT
     if (!createRes.ok && createRes.status !== 409) {
+      console.error('Upload-Post create user error:', {
+        status: createRes.status,
+        statusText: createRes.statusText,
+        body: createData
+      });
       throw new Error(createData.message || 'Failed to create Upload-Post user');
     }
 
@@ -62,13 +71,27 @@ serve(async (req) => {
     console.log('Generate JWT response:', jwtRes.status, jwtData);
 
     if (!jwtRes.ok) {
+      console.error('Upload-Post generate JWT error:', {
+        status: jwtRes.status,
+        statusText: jwtRes.statusText,
+        body: jwtData
+      });
       throw new Error(jwtData.message || 'Failed to generate Upload-Post JWT');
     }
+
+    // Calculate expires_at from duration (default 48h)
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 48);
+
+    console.log('JWT generated successfully:', { 
+      access_url: jwtData.access_url,
+      calculated_expires_at: expiresAt.toISOString()
+    });
 
     return new Response(
       JSON.stringify({ 
         access_url: jwtData.access_url,
-        expires_at: jwtData.expires_at 
+        expires_at: expiresAt.toISOString()
       }), 
       { 
         status: 200,

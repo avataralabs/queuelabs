@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useProfiles, Platform } from '@/hooks/useProfiles';
 import { useScheduleSlots } from '@/hooks/useScheduleSlots';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -20,15 +20,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, Users, Clock } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, Clock, Link, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
+import { useSearchParams } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 
 export default function ProfilesPage() {
-  const { profiles, isLoading, addProfile, updateProfile, deleteProfile } = useProfiles();
+  const { profiles, isLoading, addProfile, updateProfile, deleteProfile, syncAccounts, regenerateAccessUrl } = useProfiles();
   const { slots } = useScheduleSlots();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', platform: 'tiktok' as Platform });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { toast } = useToast();
+  
+  // Handle callback from Upload-Post connect page
+  useEffect(() => {
+    const justConnected = searchParams.get('connected') === 'true';
+    if (justConnected) {
+      toast({ title: 'Account connected successfully!' });
+      // Remove the query param
+      setSearchParams({});
+      // Sync all profiles to get updated connected accounts
+      profiles.forEach(profile => {
+        if (profile.uploadpost_username) {
+          syncAccounts.mutate(profile.id);
+        }
+      });
+    }
+  }, [searchParams]);
   
   const handleSave = () => {
     if (!formData.name.trim()) return;
@@ -55,9 +76,22 @@ export default function ProfilesPage() {
       deleteProfile.mutate(id);
     }
   };
+
+  const handleReconnect = (profileId: string) => {
+    regenerateAccessUrl.mutate(profileId);
+  };
   
   const getSlotCount = (profileId: string) => 
     slots.filter(s => s.profile_id === profileId && s.is_active).length;
+
+  const isConnected = (profile: typeof profiles[0]) => {
+    return profile.connected_accounts && profile.connected_accounts.length > 0;
+  };
+
+  const isAccessUrlExpired = (profile: typeof profiles[0]) => {
+    if (!profile.access_url_expires_at) return true;
+    return new Date(profile.access_url_expires_at) < new Date();
+  };
   
   return (
     <MainLayout>
@@ -104,6 +138,7 @@ export default function ProfilesPage() {
                   <Select 
                     value={formData.platform} 
                     onValueChange={(value: Platform) => setFormData(prev => ({ ...prev, platform: value }))}
+                    disabled={!!editingProfile}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -129,9 +164,23 @@ export default function ProfilesPage() {
                       </SelectItem>
                     </SelectContent>
                   </Select>
+                  {!editingProfile && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      After creating, you'll be redirected to connect your social account.
+                    </p>
+                  )}
                 </div>
-                <Button onClick={handleSave} className="w-full">
-                  {editingProfile ? 'Save Changes' : 'Create Profile'}
+                <Button 
+                  onClick={handleSave} 
+                  className="w-full"
+                  disabled={addProfile.isPending}
+                >
+                  {addProfile.isPending ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : editingProfile ? 'Save Changes' : 'Create & Connect'}
                 </Button>
               </div>
             </DialogContent>
@@ -163,7 +212,20 @@ export default function ProfilesPage() {
                 className="glass rounded-xl p-5 hover:shadow-elevated transition-all duration-200 group"
               >
                 <div className="flex items-start justify-between mb-4">
-                  <PlatformBadge platform={profile.platform} />
+                  <div className="flex items-center gap-2">
+                    <PlatformBadge platform={profile.platform} />
+                    {isConnected(profile) ? (
+                      <Badge variant="outline" className="text-green-500 border-green-500/30 bg-green-500/10">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Connected
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-yellow-500 border-yellow-500/30 bg-yellow-500/10">
+                        <XCircle className="w-3 h-3 mr-1" />
+                        Not Connected
+                      </Badge>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button 
                       size="icon-sm" 
@@ -186,6 +248,33 @@ export default function ProfilesPage() {
                 <p className="text-sm text-muted-foreground mb-4">
                   Created {format(new Date(profile.created_at), 'MMM d, yyyy')}
                 </p>
+
+                {/* Connected Account Info */}
+                {isConnected(profile) && profile.connected_accounts?.[0] && (
+                  <div className="mb-4 p-3 rounded-lg bg-muted/50">
+                    <p className="text-sm font-medium">
+                      @{profile.connected_accounts[0].username}
+                    </p>
+                  </div>
+                )}
+
+                {/* Reconnect Button */}
+                {!isConnected(profile) && profile.uploadpost_username && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mb-4"
+                    onClick={() => handleReconnect(profile.id)}
+                    disabled={regenerateAccessUrl.isPending}
+                  >
+                    {regenerateAccessUrl.isPending ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Link className="w-4 h-4" />
+                    )}
+                    Connect Account
+                  </Button>
+                )}
                 
                 <div className="flex items-center gap-2 text-sm text-muted-foreground pt-4 border-t border-border">
                   <Clock className="w-4 h-4" />

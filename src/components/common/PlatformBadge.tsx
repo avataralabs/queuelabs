@@ -6,6 +6,7 @@ interface PlatformBadgeProps {
   platform: Platform;
   size?: 'sm' | 'md' | 'lg';
   showLabel?: boolean;
+  variant?: 'badge' | 'icon';
 }
 
 const platformConfig = {
@@ -38,8 +39,18 @@ const iconSizes: Record<string, 'sm' | 'md' | 'lg'> = {
   lg: 'lg',
 };
 
-export function PlatformBadge({ platform, size = 'md', showLabel = true }: PlatformBadgeProps) {
+export function PlatformBadge({ platform, size = 'md', showLabel = true, variant = 'badge' }: PlatformBadgeProps) {
   const config = platformConfig[platform];
+  
+  // Icon-only mode - no background, no rounded
+  if (variant === 'icon') {
+    return (
+      <span className="inline-flex items-center">
+        <PlatformIcon platform={platform} size={iconSizes[size]} />
+        {showLabel && <span className="ml-1.5">{config.label}</span>}
+      </span>
+    );
+  }
   
   return (
     <span className={cn(

@@ -48,12 +48,15 @@ serve(async (req) => {
       let statusCode = 500;
       
       // Parse the nested error message from n8n format
-      // Format: "409 - \"{\"success\":false,\"message\":\"Username already in use\"}\n\""
-      if (result.error.status === 409) {
+      // Format: { "error": { "message": "409 - \"{\"success\":false,\"message\":\"Username already in use\"}\n\"" } }
+      const errorMsg = result.error.message || '';
+      
+      // Check if it's a 409 error by looking at the message string
+      if (errorMsg.includes('409')) {
         statusCode = 409;
         try {
-          const errorString = result.error.message;
-          const jsonMatch = errorString.match(/\{.*\}/);
+          // Extract JSON from the message string
+          const jsonMatch = errorMsg.match(/\{[^{}]*"message"\s*:\s*"[^"]*"[^{}]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
             errorMessage = parsed.message || 'Username already in use';

@@ -130,11 +130,22 @@ export function useProfiles() {
 
   const deleteProfile = useMutation({
     mutationFn: async (id: string) => {
-      // Get profile to find the username
-      const profile = query.data?.find(p => p.id === id);
+      // Fetch profile directly from database to ensure correct username
+      const { data: profile, error: fetchError } = await supabase
+        .from('profiles')
+        .select('uploadpost_username')
+        .eq('id', id)
+        .single();
+      
+      if (fetchError) {
+        console.error('Failed to fetch profile:', fetchError);
+        throw new Error('Failed to fetch profile for deletion');
+      }
       
       // Call edge function to delete from webhook
       if (profile?.uploadpost_username) {
+        console.log('Deleting profile with username:', profile.uploadpost_username);
+        
         const { error: fnError } = await supabase.functions.invoke(
           'uploadpost-delete-profile',
           {

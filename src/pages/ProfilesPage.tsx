@@ -138,10 +138,15 @@ export default function ProfilesPage() {
               <div className="space-y-4 pt-4">
                 <div>
                   <label className="text-sm font-medium mb-2 block">Profile Name</label>
-                  <Input
+                <Input
                     placeholder="My Account"
                     value={formData.name}
                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !addProfile.isPending) {
+                        handleSave();
+                      }
+                    }}
                   />
                 </div>
                 <Button 

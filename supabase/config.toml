@@ -1,7 +1,7 @@
 project_id = "wspspxjabyjnpwbkfssd"
 
 [functions.uploadpost-create-profile]
-verify_jwt = true
+verify_jwt = false
 
 [functions.uploadpost-get-accounts]
-verify_jwt = true
+verify_jwt = false

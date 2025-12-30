@@ -13,13 +13,6 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from '@/components/ui/dialog';
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Plus, Pencil, Trash2, Users, Clock, Link, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
@@ -55,9 +48,9 @@ export default function ProfilesPage() {
     if (!formData.name.trim()) return;
     
     if (editingProfile) {
-      updateProfile.mutate({ id: editingProfile, ...formData });
+      updateProfile.mutate({ id: editingProfile, name: formData.name, platform: formData.platform });
     } else {
-      addProfile.mutate(formData);
+      addProfile.mutate({ name: formData.name });
     }
     
     setFormData({ name: '', platform: 'tiktok' });
@@ -93,18 +86,6 @@ export default function ProfilesPage() {
     return new Date(profile.access_url_expires_at) < new Date();
   };
 
-  const getPlaceholder = (platform: Platform) => {
-    switch (platform) {
-      case 'tiktok':
-        return 'My TikTok Account';
-      case 'instagram':
-        return 'My Instagram Account';
-      case 'youtube':
-        return 'My YouTube Account';
-      default:
-        return 'My Account';
-    }
-  };
   
   return (
     <MainLayout>
@@ -141,47 +122,10 @@ export default function ProfilesPage() {
                 <div>
                   <label className="text-sm font-medium mb-2 block">Profile Name</label>
                   <Input
-                    placeholder={getPlaceholder(formData.platform)}
+                    placeholder="My Account"
                     value={formData.name}
                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                   />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Platform</label>
-                  <Select 
-                    value={formData.platform} 
-                    onValueChange={(value: Platform) => setFormData(prev => ({ ...prev, platform: value }))}
-                    disabled={!!editingProfile}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="tiktok">
-                        <div className="flex items-center gap-2">
-                          <PlatformIcon platform="tiktok" size="sm" className="text-[#00f2ea]" />
-                          TikTok
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="instagram">
-                        <div className="flex items-center gap-2">
-                          <PlatformIcon platform="instagram" size="sm" className="text-[#E1306C]" />
-                          Instagram
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="youtube">
-                        <div className="flex items-center gap-2">
-                          <PlatformIcon platform="youtube" size="sm" className="text-[#FF0000]" />
-                          YouTube
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {!editingProfile && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      After creating, you'll be redirected to connect your social account.
-                    </p>
-                  )}
                 </div>
                 <Button 
                   onClick={handleSave} 
@@ -193,7 +137,7 @@ export default function ProfilesPage() {
                       <RefreshCw className="w-4 h-4 animate-spin" />
                       Creating...
                     </>
-                  ) : editingProfile ? 'Save Changes' : 'Create & Connect'}
+                  ) : editingProfile ? 'Save Changes' : 'Create'}
                 </Button>
               </div>
             </DialogContent>

@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,99 +12,69 @@ serve(async (req) => {
   }
 
   try {
-    const apiKey = Deno.env.get('UPLOADPOST_API_KEY');
-    console.log('API Key exists:', !!apiKey);
-    console.log('API Key length:', apiKey?.length);
-    console.log('API Key prefix:', apiKey?.substring(0, 8) + '...');
+    const webhookUrl = Deno.env.get('WEBHOOK_URL');
+    console.log('WEBHOOK_URL exists:', !!webhookUrl);
     
-    if (!apiKey) {
-      console.error('UPLOADPOST_API_KEY not configured');
-      throw new Error('Upload-Post API key not configured');
+    if (!webhookUrl) {
+      console.error('WEBHOOK_URL not configured');
+      throw new Error('Webhook URL not configured');
     }
 
-    const { username, platform, redirect_url } = await req.json();
-    console.log('Creating Upload-Post profile:', { username, platform, redirect_url });
+    const { username } = await req.json();
+    console.log('Creating profile with username:', username);
 
-    // Step 1: Create User Profile on Upload-Post
-    console.log('Step 1: Creating user on Upload-Post...');
-    const createRes = await fetch('https://api.upload-post.com/api/uploadposts/users', {
+    // POST to webhook URL
+    console.log('Sending POST to webhook...');
+    const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `ApiKey ${apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ username })
     });
 
-    const createData = await createRes.json();
-    console.log('Create user response:', createRes.status, createData);
-    console.log('Response is array:', Array.isArray(createData));
+    const responseData = await response.json();
+    console.log('Webhook response status:', response.status);
+    console.log('Webhook response data:', responseData);
+    console.log('Response is array:', Array.isArray(responseData));
 
-    // Response from Upload-Post is an array, get first element
-    const result = Array.isArray(createData) ? createData[0] : createData;
+    if (!response.ok) {
+      console.error('Webhook error:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: responseData
+      });
+      throw new Error(responseData?.message || 'Failed to create profile');
+    }
+
+    // Response is an array, get first element
+    const result = Array.isArray(responseData) ? responseData[0] : responseData;
     console.log('Parsed result:', result);
 
-    // If user already exists, that's okay - continue to generate JWT
-    if (!createRes.ok && createRes.status !== 409) {
-      console.error('Upload-Post create user error:', {
-        status: createRes.status,
-        statusText: createRes.statusText,
-        body: createData
-      });
-      throw new Error(result?.message || 'Failed to create Upload-Post user');
+    // Check success field
+    if (result && result.success === false) {
+      throw new Error(result.message || 'Failed to create profile');
     }
 
-    // Check success field from response
-    if (result && result.success === false && result.message) {
-      throw new Error(result.message);
-    }
-
-    // Log profile info if available
-    if (result?.success && result?.profile) {
-      console.log('Profile created successfully:', result.profile);
-    }
-
-    // Step 2: Generate JWT URL for connecting social account
-    console.log('Step 2: Generating JWT URL...');
-    const jwtRes = await fetch('https://api.upload-post.com/api/uploadposts/users/generate-jwt', {
-      method: 'POST',
-      headers: {
-        'Authorization': `ApiKey ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        username,
-        redirect_url,
-        platforms: [platform],
-        connect_title: 'Connect your account',
-        connect_description: 'Link your social media account to manage your content'
-      })
-    });
-
-    const jwtData = await jwtRes.json();
-    console.log('Generate JWT response:', jwtRes.status, jwtData);
-
-    if (!jwtRes.ok) {
-      console.error('Upload-Post generate JWT error:', {
-        status: jwtRes.status,
-        statusText: jwtRes.statusText,
-        body: jwtData
-      });
-      throw new Error(jwtData.message || 'Failed to generate Upload-Post JWT');
+    if (!result?.success || !result?.access_url) {
+      throw new Error('Invalid response from webhook');
     }
 
     // Calculate expires_at from duration (default 48h)
     const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 48);
+    const durationMatch = result.duration?.match(/(\d+)h/);
+    const hours = durationMatch ? parseInt(durationMatch[1]) : 48;
+    expiresAt.setHours(expiresAt.getHours() + hours);
 
-    console.log('JWT generated successfully:', { 
-      access_url: jwtData.access_url,
-      calculated_expires_at: expiresAt.toISOString()
+    console.log('Profile created successfully:', { 
+      access_url: result.access_url,
+      duration: result.duration,
+      expires_at: expiresAt.toISOString()
     });
 
     return new Response(
       JSON.stringify({ 
-        access_url: jwtData.access_url,
+        access_url: result.access_url,
         expires_at: expiresAt.toISOString()
       }), 
       { 

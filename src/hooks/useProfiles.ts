@@ -101,16 +101,9 @@ export function useProfiles() {
         access_url: uploadpostData?.access_url 
       } as Profile & { access_url: string };
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
-      toast({ title: 'Profile created! Redirecting to connect your account...' });
-      
-      // Redirect user to Upload-Post connect page
-      if (data.access_url) {
-        setTimeout(() => {
-          window.location.href = data.access_url;
-        }, 1000);
-      }
+      toast({ title: 'Profile created successfully!' });
     },
     onError: (error: Error) => {
       toast({ title: 'Failed to create profile', description: error.message, variant: 'destructive' });
@@ -238,16 +231,44 @@ export function useProfiles() {
 
       return data.access_url;
     },
-    onSuccess: (accessUrl) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
-      if (accessUrl) {
-        window.location.href = accessUrl;
-      }
     },
     onError: (error: Error) => {
-      toast({ title: 'Failed to reconnect', description: error.message, variant: 'destructive' });
+      toast({ title: 'Failed to generate access URL', description: error.message, variant: 'destructive' });
     }
   });
+
+  // Open connect popup window
+  const openConnectPopup = async (profileId: string): Promise<boolean> => {
+    const profile = query.data?.find(p => p.id === profileId);
+    if (!profile) {
+      toast({ title: 'Profile not found', variant: 'destructive' });
+      return false;
+    }
+
+    // Check if access_url exists and is valid (not expired)
+    if (profile.access_url && profile.access_url_expires_at) {
+      const expiresAt = new Date(profile.access_url_expires_at);
+      if (expiresAt > new Date()) {
+        // URL is valid, open popup
+        window.open(profile.access_url, 'connect-account', 'width=600,height=700,scrollbars=yes');
+        return true;
+      }
+    }
+
+    // URL is expired or doesn't exist, need to regenerate
+    return false;
+  };
+
+  // Clear expired access_url from database
+  const clearExpiredAccessUrl = async (profileId: string) => {
+    await supabase
+      .from('profiles')
+      .update({ access_url: null, access_url_expires_at: null })
+      .eq('id', profileId);
+    queryClient.invalidateQueries({ queryKey: ['profiles'] });
+  };
 
   return {
     profiles: query.data ?? [],
@@ -256,6 +277,8 @@ export function useProfiles() {
     updateProfile,
     deleteProfile,
     syncAccounts,
-    regenerateAccessUrl
+    regenerateAccessUrl,
+    openConnectPopup,
+    clearExpiredAccessUrl
   };
 }

@@ -72,8 +72,10 @@ export function useProfiles() {
         throw new Error(fnError.message || 'Failed to create profile');
       }
 
+      // Handle error response from edge function (e.g., 409 Username already exists)
       if (uploadpostData?.error) {
-        throw new Error(uploadpostData.error);
+        const errorMessage = uploadpostData.error;
+        throw new Error(errorMessage);
       }
       
       // 2. Save to database

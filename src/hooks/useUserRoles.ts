@@ -43,8 +43,8 @@ export function useUserRoles() {
       return data ?? false;
     },
     enabled: !!user,
-    staleTime: 1000 * 60 * 5,  // 5 minutes - data stays fresh
-    gcTime: 1000 * 60 * 10,   // 10 minutes - cache retention
+    staleTime: 0,  // Selalu refetch untuk memastikan data fresh
+    gcTime: 1000 * 60 * 5,  // 5 minutes cache retention
   });
 
   // Get current user's role

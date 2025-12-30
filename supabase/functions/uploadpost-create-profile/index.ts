@@ -38,6 +38,44 @@ serve(async (req) => {
     console.log('Webhook response data:', responseData);
     console.log('Response is array:', Array.isArray(responseData));
 
+    // Response is an array, get first element
+    const result = Array.isArray(responseData) ? responseData[0] : responseData;
+    console.log('Parsed result:', result);
+
+    // Check if response contains error object (e.g., 409 conflict)
+    if (result?.error) {
+      let errorMessage = 'Failed to create profile';
+      let statusCode = 500;
+      
+      // Parse the nested error message from n8n format
+      // Format: "409 - \"{\"success\":false,\"message\":\"Username already in use\"}\n\""
+      if (result.error.status === 409) {
+        statusCode = 409;
+        try {
+          const errorString = result.error.message;
+          const jsonMatch = errorString.match(/\{.*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            errorMessage = parsed.message || 'Username already in use';
+          } else {
+            errorMessage = 'Username already in use';
+          }
+        } catch {
+          errorMessage = 'Username already in use';
+        }
+      }
+      
+      console.error('Webhook error:', { statusCode, errorMessage, error: result.error });
+      
+      return new Response(
+        JSON.stringify({ error: errorMessage, code: statusCode === 409 ? 'USERNAME_EXISTS' : 'ERROR' }),
+        { 
+          status: statusCode,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
     if (!response.ok) {
       console.error('Webhook error:', {
         status: response.status,
@@ -46,10 +84,6 @@ serve(async (req) => {
       });
       throw new Error(responseData?.message || 'Failed to create profile');
     }
-
-    // Response is an array, get first element
-    const result = Array.isArray(responseData) ? responseData[0] : responseData;
-    console.log('Parsed result:', result);
 
     // Check success field
     if (result && result.success === false) {

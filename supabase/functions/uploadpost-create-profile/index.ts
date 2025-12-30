@@ -27,7 +27,10 @@ serve(async (req) => {
     console.log('Sending POST to webhook...');
     const response = await fetch(webhookUrl, {
       method: 'POST',
-      body: `{"username": "${username}"}`
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username })
     });
 
     const responseData = await response.json();

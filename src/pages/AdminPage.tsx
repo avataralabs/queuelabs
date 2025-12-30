@@ -117,7 +117,7 @@ export default function AdminPage() {
                       return (
                         <TableRow key={userRole.id} className="border-border">
                           <TableCell className="font-medium">
-                            {isCurrentUser ? user?.email : userRole.user_id.slice(0, 8) + '...'}
+                            {userRole.email || userRole.user_id.slice(0, 8) + '...'}
                           </TableCell>
                           <TableCell>
                             {isCurrentUser ? (

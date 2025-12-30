@@ -27,7 +27,10 @@ Deno.serve(async (req) => {
 
     const response = await fetch(webhookUrl, {
       method: 'DELETE',
-      body: `{"username": "${username}"}`
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username })
     });
 
     console.log('Webhook response status:', response.status);

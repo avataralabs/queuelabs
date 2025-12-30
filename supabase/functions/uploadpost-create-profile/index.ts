@@ -30,7 +30,7 @@ serve(async (req) => {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ username })
+      body: JSON.stringify({ data: 'create', username })
     });
 
     const responseData = await response.json();

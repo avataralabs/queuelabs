@@ -23,14 +23,14 @@ Deno.serve(async (req) => {
       throw new Error('Username is required');
     }
 
-    console.log('Sending DELETE request to webhook for username:', username);
+    console.log('Sending POST request to webhook for delete, username:', username);
 
     const response = await fetch(webhookUrl, {
-      method: 'DELETE',
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ username })
+      body: JSON.stringify({ data: 'delete', username })
     });
 
     console.log('Webhook response status:', response.status);

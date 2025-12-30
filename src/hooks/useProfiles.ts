@@ -208,28 +208,32 @@ export function useProfiles() {
     }
   });
 
-  // Regenerate access URL for reconnecting
+  // Regenerate access URL for reconnecting (when access_url expired)
   const regenerateAccessUrl = useMutation({
     mutationFn: async (profileId: string) => {
-      const profile = query.data?.find(p => p.id === profileId);
-      if (!profile?.uploadpost_username) {
+      // Fetch profile directly from database to ensure we have the latest data
+      const { data: profile, error: fetchError } = await supabase
+        .from('profiles')
+        .select('uploadpost_username, platform')
+        .eq('id', profileId)
+        .single();
+
+      if (fetchError || !profile?.uploadpost_username) {
         throw new Error('Profile not connected to Upload-Post');
       }
 
-      const redirectUrl = `${window.location.origin}/profiles?connected=true`;
+      console.log('Regenerating access URL for:', profile.uploadpost_username);
 
+      // Use connect-account edge function
       const { data, error } = await supabase.functions.invoke(
-        'uploadpost-create-profile',
+        'uploadpost-connect-account',
         {
-          body: {
-            username: profile.uploadpost_username,
-            platform: profile.platform,
-            redirect_url: redirectUrl
-          }
+          body: { username: profile.uploadpost_username }
         }
       );
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       // Update profile with new access URL
       await supabase

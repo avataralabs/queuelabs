@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 
 export default function ProfilesPage() {
-  const { profiles, isLoading, addProfile, updateProfile, deleteProfile, syncAccounts, regenerateAccessUrl } = useProfiles();
+  const { profiles, isLoading, addProfile, updateProfile, deleteProfile, syncAccounts, regenerateAccessUrl, refreshAccounts } = useProfiles();
   const { slots } = useScheduleSlots();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<string | null>(null);
@@ -28,6 +28,7 @@ export default function ProfilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const [connectingProfileId, setConnectingProfileId] = useState<string | null>(null);
+  const [refreshingProfileId, setRefreshingProfileId] = useState<string | null>(null);
   
   // Handle callback from Upload-Post connect page
   useEffect(() => {
@@ -71,10 +72,25 @@ export default function ProfilesPage() {
     
     regenerateAccessUrl.mutate(profileId, {
       onSuccess: (accessUrl) => {
-        if (accessUrl) {
-          window.open(accessUrl, 'connect-account', 'width=600,height=700,scrollbars=yes');
-        }
         setConnectingProfileId(null);
+        
+        if (accessUrl) {
+          const popup = window.open(accessUrl, 'connect-account', 'width=600,height=700,scrollbars=yes');
+          
+          // Poll to check if popup is closed
+          const checkPopupClosed = setInterval(() => {
+            if (popup && popup.closed) {
+              clearInterval(checkPopupClosed);
+              // Popup closed - refresh connected accounts
+              setRefreshingProfileId(profileId);
+              refreshAccounts.mutate(profileId, {
+                onSettled: () => {
+                  setRefreshingProfileId(null);
+                }
+              });
+            }
+          }, 500);
+        }
       },
       onError: () => {
         setConnectingProfileId(null);
@@ -219,14 +235,24 @@ export default function ProfilesPage() {
                     size="sm"
                     className="w-full mb-4"
                     onClick={() => handleConnectAccount(profile.id)}
-                    disabled={connectingProfileId === profile.id || regenerateAccessUrl.isPending}
+                    disabled={connectingProfileId === profile.id || refreshingProfileId === profile.id}
                   >
-                    {connectingProfileId === profile.id || regenerateAccessUrl.isPending ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    {connectingProfileId === profile.id ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Opening...
+                      </>
+                    ) : refreshingProfileId === profile.id ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Syncing...
+                      </>
                     ) : (
-                      <Link className="w-4 h-4" />
+                      <>
+                        <Link className="w-4 h-4" />
+                        Connect Account
+                      </>
                     )}
-                    Connect Account
                   </Button>
                 )}
                 

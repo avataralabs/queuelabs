@@ -25,14 +25,15 @@ Deno.serve(async (req) => {
       throw new Error('Username is required');
     }
 
-    console.log('Connect account for username:', username);
+    console.log('Refresh accounts for username:', username);
 
+    // Send refresh request to webhook
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ data: 'connect', username })
+      body: JSON.stringify({ data: 'refresh', username })
     });
 
     const responseData = await response.json();
@@ -44,7 +45,7 @@ Deno.serve(async (req) => {
 
     // Check if response contains error
     if (result?.error) {
-      const errorMsg = result.error.message || result.error || 'Failed to connect account';
+      const errorMsg = result.error.message || result.error || 'Failed to refresh accounts';
       console.error('Webhook error:', errorMsg);
       throw new Error(errorMsg);
     }
@@ -55,20 +56,33 @@ Deno.serve(async (req) => {
         statusText: response.statusText,
         body: responseData
       });
-      throw new Error(result?.message || 'Failed to connect account');
+      throw new Error(result?.message || 'Failed to refresh accounts');
     }
 
-    if (!result?.success || !result?.access_url) {
-      throw new Error('Invalid response from webhook');
+    // Parse connected accounts from social_accounts
+    const socialAccounts = result?.profile?.social_accounts || result?.social_accounts || {};
+    const connectedAccounts: Array<{ platform: string; username: string; profile_picture?: string; connected_at: string }> = [];
+    const platformOrder = ['tiktok', 'instagram', 'youtube'];
+    
+    for (const platform of platformOrder) {
+      const accountData = socialAccounts[platform];
+      // Check if platform has actual data (not empty string, not null/undefined)
+      if (accountData && typeof accountData === 'object' && Object.keys(accountData).length > 0) {
+        connectedAccounts.push({
+          platform,
+          username: accountData.username || accountData.name || '',
+          profile_picture: accountData.profile_picture || accountData.avatar || '',
+          connected_at: new Date().toISOString()
+        });
+      }
     }
 
-    console.log('Connect account successful:', {
-      access_url: result.access_url
-    });
+    console.log('Parsed connected accounts:', connectedAccounts);
 
     return new Response(
       JSON.stringify({
-        access_url: result.access_url
+        success: true,
+        connected_accounts: connectedAccounts
       }),
       {
         status: 200,
@@ -78,7 +92,7 @@ Deno.serve(async (req) => {
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Error in uploadpost-connect-account:', errorMessage);
+    console.error('Error in uploadpost-refresh-accounts:', errorMessage);
     return new Response(
       JSON.stringify({ error: errorMessage }),
       {

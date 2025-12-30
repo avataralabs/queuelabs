@@ -215,7 +215,7 @@ export function useProfiles() {
       // Fetch profile directly from database to ensure we have the latest data
       const { data: profile, error: fetchError } = await supabase
         .from('profiles')
-        .select('uploadpost_username, platform')
+        .select('uploadpost_username')
         .eq('id', profileId)
         .single();
 
@@ -225,7 +225,7 @@ export function useProfiles() {
 
       console.log('Regenerating access URL for:', profile.uploadpost_username);
 
-      // Use connect-account edge function
+      // Use connect-account edge function - only returns access_url now
       const { data, error } = await supabase.functions.invoke(
         'uploadpost-connect-account',
         {
@@ -236,28 +236,58 @@ export function useProfiles() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      // Transform connected_platforms to ConnectedAccount format
-      const connectedAccounts: ConnectedAccount[] = (data.connected_platforms || []).map((platform: string) => ({
-        platform,
-        username: ''
-      }));
-
-      // Update profile with new access URL and connected accounts (tanpa expires_at)
-      await supabase
-        .from('profiles')
-        .update({
-          access_url: data.access_url,
-          connected_accounts: connectedAccounts as unknown as Json
-        })
-        .eq('id', profileId);
-
       return data.access_url;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profiles'] });
     },
     onError: (error: Error) => {
       toast({ title: 'Failed to generate access URL', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Refresh connected accounts after popup is closed
+  const refreshAccounts = useMutation({
+    mutationFn: async (profileId: string) => {
+      // Fetch profile to get username
+      const { data: profile, error: fetchError } = await supabase
+        .from('profiles')
+        .select('uploadpost_username')
+        .eq('id', profileId)
+        .single();
+
+      if (fetchError || !profile?.uploadpost_username) {
+        throw new Error('Profile not found');
+      }
+
+      console.log('Refreshing accounts for:', profile.uploadpost_username);
+
+      // Call refresh edge function
+      const { data, error } = await supabase.functions.invoke(
+        'uploadpost-refresh-accounts',
+        {
+          body: { username: profile.uploadpost_username }
+        }
+      );
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      // Update profile with new connected accounts
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          connected_accounts: data.connected_accounts as unknown as Json
+        })
+        .eq('id', profileId);
+
+      if (updateError) throw updateError;
+
+      return data.connected_accounts;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      toast({ title: 'Accounts synced successfully!' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to sync accounts', description: error.message, variant: 'destructive' });
     }
   });
 
@@ -268,6 +298,7 @@ export function useProfiles() {
     updateProfile,
     deleteProfile,
     syncAccounts,
-    regenerateAccessUrl
+    regenerateAccessUrl,
+    refreshAccounts
   };
 }

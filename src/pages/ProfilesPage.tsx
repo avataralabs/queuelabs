@@ -92,6 +92,19 @@ export default function ProfilesPage() {
     if (!profile.access_url_expires_at) return true;
     return new Date(profile.access_url_expires_at) < new Date();
   };
+
+  const getPlaceholder = (platform: Platform) => {
+    switch (platform) {
+      case 'tiktok':
+        return 'My TikTok Account';
+      case 'instagram':
+        return 'My Instagram Account';
+      case 'youtube':
+        return 'My YouTube Account';
+      default:
+        return 'My Account';
+    }
+  };
   
   return (
     <MainLayout>
@@ -128,7 +141,7 @@ export default function ProfilesPage() {
                 <div>
                   <label className="text-sm font-medium mb-2 block">Profile Name</label>
                   <Input
-                    placeholder="My TikTok Account"
+                    placeholder={getPlaceholder(formData.platform)}
                     value={formData.name}
                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                   />

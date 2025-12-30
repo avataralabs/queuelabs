@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 
 export default function ProfilesPage() {
-  const { profiles, isLoading, addProfile, updateProfile, deleteProfile, syncAccounts, regenerateAccessUrl, openConnectPopup } = useProfiles();
+  const { profiles, isLoading, addProfile, updateProfile, deleteProfile, syncAccounts, regenerateAccessUrl, fetchAccessUrl } = useProfiles();
   const { slots } = useScheduleSlots();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<string | null>(null);
@@ -69,24 +69,39 @@ export default function ProfilesPage() {
   const handleConnectAccount = async (profileId: string) => {
     setConnectingProfileId(profileId);
     
-    // Try to open popup with existing valid URL
-    const opened = await openConnectPopup(profileId);
-    
-    if (!opened) {
-      // URL expired or doesn't exist, regenerate and then open
+    try {
+      // Step 1: Cek database langsung (bukan cache)
+      const profileData = await fetchAccessUrl(profileId);
+      
+      // Step 2: Cek apakah access_url valid dan belum expired
+      const isValid = profileData?.access_url && 
+        profileData?.access_url_expires_at && 
+        new Date(profileData.access_url_expires_at) > new Date();
+      
+      if (isValid) {
+        // Langsung buka popup dengan URL dari database
+        window.open(profileData.access_url, 'connect-account', 'width=600,height=700,scrollbars=yes');
+        setConnectingProfileId(null);
+        return;
+      }
+      
+      // Step 3: Jika tidak valid, regenerate
       regenerateAccessUrl.mutate(profileId, {
         onSuccess: async () => {
-          // Wait a bit for the query to refresh, then try to open popup
-          setTimeout(async () => {
-            await openConnectPopup(profileId);
-            setConnectingProfileId(null);
-          }, 500);
+          // Step 4: Query database lagi untuk ambil URL baru
+          const newData = await fetchAccessUrl(profileId);
+          if (newData?.access_url) {
+            window.open(newData.access_url, 'connect-account', 'width=600,height=700,scrollbars=yes');
+          }
+          setConnectingProfileId(null);
         },
         onError: () => {
           setConnectingProfileId(null);
         }
       });
-    } else {
+    } catch (error) {
+      console.error('Error connecting account:', error);
+      toast({ title: 'Failed to connect account', variant: 'destructive' });
       setConnectingProfileId(null);
     }
   };

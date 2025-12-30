@@ -133,18 +133,24 @@ export function useUserRoles() {
 
   const deleteUserRole = useMutation({
     mutationFn: async (userId: string) => {
-      const { error } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', userId);
-      if (error) throw error;
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { userId },
+      });
+      
+      if (error) {
+        throw new Error(error.message || 'Failed to delete user');
+      }
+      
+      if (data?.error) {
+        throw new Error(data.error);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['allUserRoles'] });
-      toast({ title: 'User deleted' });
+      toast({ title: 'User deleted successfully' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Failed to delete role', description: error.message, variant: 'destructive' });
+      toast({ title: 'Failed to delete user', description: error.message, variant: 'destructive' });
     }
   });
 

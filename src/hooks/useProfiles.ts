@@ -140,6 +140,25 @@ export function useProfiles() {
 
   const deleteProfile = useMutation({
     mutationFn: async (id: string) => {
+      // Get profile to find the username
+      const profile = query.data?.find(p => p.id === id);
+      
+      // Call edge function to delete from webhook
+      if (profile?.uploadpost_username) {
+        const { error: fnError } = await supabase.functions.invoke(
+          'uploadpost-delete-profile',
+          {
+            body: { username: profile.uploadpost_username }
+          }
+        );
+        
+        if (fnError) {
+          console.error('Webhook delete error:', fnError);
+          // Continue with local delete even if webhook fails
+        }
+      }
+      
+      // Delete from database
       const { error } = await supabase
         .from('profiles')
         .delete()

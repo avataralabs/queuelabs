@@ -10,14 +10,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
-import { useUserRoles } from '@/hooks/useUserRoles';
 import { useTheme } from 'next-themes';
 import { useNavigate } from 'react-router-dom';
 import { ChangePasswordDialog } from '@/components/ChangePasswordDialog';
 
 export function Header() {
-  const { user, signOut } = useAuth();
-  const { isAdmin } = useUserRoles();
+  const { user, signOut, isAdmin } = useAuth();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);

@@ -67,15 +67,13 @@ export function Header() {
               </p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-border" />
-            {isAdmin && (
-              <DropdownMenuItem 
-                className="cursor-pointer py-2.5"
-                onSelect={handleAdminNavigation}
-              >
-                <Settings className="w-4 h-4 mr-3" />
-                Admin Panel
-              </DropdownMenuItem>
-            )}
+            <DropdownMenuItem 
+              className="cursor-pointer py-2.5"
+              onSelect={handleAdminNavigation}
+            >
+              <Settings className="w-4 h-4 mr-3" />
+              Admin Panel
+            </DropdownMenuItem>
             <DropdownMenuItem 
               className="cursor-pointer py-2.5"
               onClick={() => setChangePasswordOpen(true)}

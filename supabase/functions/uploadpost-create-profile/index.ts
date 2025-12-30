@@ -70,10 +70,16 @@ serve(async (req) => {
       
       console.error('Webhook error:', { statusCode, errorMessage, error: result.error });
       
+      // Return 200 with error in body so Supabase client can read it
+      // (non-2xx status codes cause Supabase client to throw without reading body)
       return new Response(
-        JSON.stringify({ error: errorMessage, code: statusCode === 409 ? 'USERNAME_EXISTS' : 'ERROR' }),
+        JSON.stringify({ 
+          success: false, 
+          error: errorMessage, 
+          code: statusCode === 409 ? 'USERNAME_EXISTS' : 'ERROR' 
+        }),
         { 
-          status: statusCode,
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );

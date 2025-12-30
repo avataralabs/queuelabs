@@ -12,6 +12,7 @@ export interface UserRole {
   created_at: string;
   is_approved: boolean;
   last_sign_in_at?: string | null;
+  email?: string | null;
 }
 
 export interface UserWithRole {
@@ -77,19 +78,22 @@ export function useUserRoles() {
       
       if (error) throw error;
       
-      // Fetch last_sign_in_at for each user
-      const rolesWithLastSignIn = await Promise.all(
+      // Fetch last_sign_in_at and email for each user
+      const rolesWithUserInfo = await Promise.all(
         (data as UserRole[]).map(async (role) => {
-          const { data: lastSignIn } = await supabase
-            .rpc('get_user_last_sign_in', { _user_id: role.user_id });
+          const [lastSignInResult, emailResult] = await Promise.all([
+            supabase.rpc('get_user_last_sign_in', { _user_id: role.user_id }),
+            supabase.rpc('get_user_email', { _user_id: role.user_id })
+          ]);
           return {
             ...role,
-            last_sign_in_at: lastSignIn as string | null
+            last_sign_in_at: lastSignInResult.data as string | null,
+            email: emailResult.data as string | null
           };
         })
       );
       
-      return rolesWithLastSignIn;
+      return rolesWithUserInfo;
     },
     enabled: isAdminQuery.data === true
   });

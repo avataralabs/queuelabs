@@ -20,13 +20,14 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 
 export default function ProfilesPage() {
-  const { profiles, isLoading, addProfile, updateProfile, deleteProfile, syncAccounts, regenerateAccessUrl } = useProfiles();
+  const { profiles, isLoading, addProfile, updateProfile, deleteProfile, syncAccounts, regenerateAccessUrl, openConnectPopup } = useProfiles();
   const { slots } = useScheduleSlots();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', platform: 'tiktok' as Platform });
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
+  const [connectingProfileId, setConnectingProfileId] = useState<string | null>(null);
   
   // Handle callback from Upload-Post connect page
   useEffect(() => {
@@ -65,8 +66,29 @@ export default function ProfilesPage() {
     }
   };
 
-  const handleReconnect = (profileId: string) => {
-    regenerateAccessUrl.mutate(profileId);
+  const handleConnectAccount = async (profileId: string) => {
+    setConnectingProfileId(profileId);
+    
+    // Try to open popup with existing valid URL
+    const opened = await openConnectPopup(profileId);
+    
+    if (!opened) {
+      // URL expired or doesn't exist, regenerate and then open
+      regenerateAccessUrl.mutate(profileId, {
+        onSuccess: async () => {
+          // Wait a bit for the query to refresh, then try to open popup
+          setTimeout(async () => {
+            await openConnectPopup(profileId);
+            setConnectingProfileId(null);
+          }, 500);
+        },
+        onError: () => {
+          setConnectingProfileId(null);
+        }
+      });
+    } else {
+      setConnectingProfileId(null);
+    }
   };
   
   const getSlotCount = (profileId: string) => 
@@ -202,16 +224,16 @@ export default function ProfilesPage() {
                   </div>
                 )}
 
-                {/* Reconnect Button */}
+                {/* Connect Account Button */}
                 {!isConnected(profile) && profile.uploadpost_username && (
                   <Button
                     variant="outline"
                     size="sm"
                     className="w-full mb-4"
-                    onClick={() => handleReconnect(profile.id)}
-                    disabled={regenerateAccessUrl.isPending}
+                    onClick={() => handleConnectAccount(profile.id)}
+                    disabled={connectingProfileId === profile.id || regenerateAccessUrl.isPending}
                   >
-                    {regenerateAccessUrl.isPending ? (
+                    {connectingProfileId === profile.id || regenerateAccessUrl.isPending ? (
                       <RefreshCw className="w-4 h-4 animate-spin" />
                     ) : (
                       <Link className="w-4 h-4" />

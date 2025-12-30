@@ -39,6 +39,11 @@ serve(async (req) => {
 
     const createData = await createRes.json();
     console.log('Create user response:', createRes.status, createData);
+    console.log('Response is array:', Array.isArray(createData));
+
+    // Response from Upload-Post is an array, get first element
+    const result = Array.isArray(createData) ? createData[0] : createData;
+    console.log('Parsed result:', result);
 
     // If user already exists, that's okay - continue to generate JWT
     if (!createRes.ok && createRes.status !== 409) {
@@ -47,7 +52,17 @@ serve(async (req) => {
         statusText: createRes.statusText,
         body: createData
       });
-      throw new Error(createData.message || 'Failed to create Upload-Post user');
+      throw new Error(result?.message || 'Failed to create Upload-Post user');
+    }
+
+    // Check success field from response
+    if (result && result.success === false && result.message) {
+      throw new Error(result.message);
+    }
+
+    // Log profile info if available
+    if (result?.success && result?.profile) {
+      console.log('Profile created successfully:', result.profile);
     }
 
     // Step 2: Generate JWT URL for connecting social account

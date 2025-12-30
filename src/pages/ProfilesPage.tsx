@@ -189,6 +189,12 @@ export default function ProfilesPage() {
                         Not Connected
                       </Badge>
                     )}
+                    {/* Platform Icons - next to badge */}
+                    {isConnected(profile) && profile.connected_accounts?.map(acc => 
+                      ['tiktok', 'instagram', 'youtube'].includes(acc.platform) && (
+                        <PlatformIcon key={acc.platform} platform={acc.platform as Platform} size="sm" />
+                      )
+                    )}
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button 
@@ -205,19 +211,6 @@ export default function ProfilesPage() {
                 <p className="text-sm text-muted-foreground mb-4">
                   Created {format(new Date(profile.created_at), 'MMM d, yyyy')}
                 </p>
-
-                {/* Connected Platform Icons */}
-                {isConnected(profile) && profile.connected_accounts && profile.connected_accounts.length > 0 && (
-                  <div className="flex items-center gap-2 mb-4">
-                    {['tiktok', 'instagram', 'youtube'].map(platform => {
-                      const hasAccount = profile.connected_accounts?.some(acc => acc.platform === platform);
-                      if (!hasAccount) return null;
-                      return (
-                        <PlatformIcon key={platform} platform={platform as Platform} size="md" />
-                      );
-                    })}
-                  </div>
-                )}
 
                 {/* Connect Account Button */}
                 {profile.uploadpost_username && (

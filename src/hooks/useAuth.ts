@@ -7,19 +7,48 @@ export function useAuth() {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const checkAdminRole = async (userId: string) => {
+      try {
+        const { data, error } = await supabase.rpc('has_role', {
+          _user_id: userId,
+          _role: 'admin'
+        });
+        if (error) {
+          console.error('Error checking admin role:', error);
+          setIsAdmin(false);
+        } else {
+          setIsAdmin(data === true);
+        }
+      } catch (err) {
+        console.error('Error in checkAdminRole:', err);
+        setIsAdmin(false);
+      }
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        setLoading(false);
         
         // Invalidate auth-related queries saat user berubah
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
           queryClient.invalidateQueries({ queryKey: ['isAdmin'] });
           queryClient.invalidateQueries({ queryKey: ['currentUserRole'] });
+          queryClient.invalidateQueries({ queryKey: ['allUserRoles'] });
+        }
+
+        // Check admin role after auth state change
+        if (session?.user) {
+          setTimeout(() => {
+            checkAdminRole(session.user.id).finally(() => setLoading(false));
+          }, 0);
+        } else {
+          setIsAdmin(false);
+          setLoading(false);
         }
       }
     );
@@ -27,7 +56,12 @@ export function useAuth() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      setLoading(false);
+      
+      if (session?.user) {
+        checkAdminRole(session.user.id).finally(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -35,8 +69,9 @@ export function useAuth() {
 
   const signOut = async () => {
     queryClient.clear();
+    setIsAdmin(false);
     await supabase.auth.signOut();
   };
 
-  return { user, session, loading, signOut };
+  return { user, session, loading, isAdmin, signOut };
 }

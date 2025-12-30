@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.uploadpost-delete-profile]
 verify_jwt = false
+
+[functions.uploadpost-connect-account]
+verify_jwt = false

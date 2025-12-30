@@ -72,24 +72,36 @@ export type Database = {
       }
       profiles: {
         Row: {
+          access_url: string | null
+          access_url_expires_at: string | null
+          connected_accounts: Json | null
           created_at: string | null
           id: string
           name: string
           platform: string
+          uploadpost_username: string | null
           user_id: string
         }
         Insert: {
+          access_url?: string | null
+          access_url_expires_at?: string | null
+          connected_accounts?: Json | null
           created_at?: string | null
           id?: string
           name: string
           platform: string
+          uploadpost_username?: string | null
           user_id: string
         }
         Update: {
+          access_url?: string | null
+          access_url_expires_at?: string | null
+          connected_accounts?: Json | null
           created_at?: string | null
           id?: string
           name?: string
           platform?: string
+          uploadpost_username?: string | null
           user_id?: string
         }
         Relationships: []

@@ -235,17 +235,21 @@ export default function ProfilesPage() {
                   Created {format(new Date(profile.created_at), 'MMM d, yyyy')}
                 </p>
 
-                {/* Connected Account Info */}
-                {isConnected(profile) && profile.connected_accounts?.[0] && (
-                  <div className="mb-4 p-3 rounded-lg bg-muted/50">
-                    <p className="text-sm font-medium">
-                      @{profile.connected_accounts[0].username}
-                    </p>
+                {/* Connected Platform Icons */}
+                {isConnected(profile) && profile.connected_accounts && profile.connected_accounts.length > 0 && (
+                  <div className="flex items-center gap-2 mb-4">
+                    {['tiktok', 'instagram', 'youtube'].map(platform => {
+                      const hasAccount = profile.connected_accounts?.some(acc => acc.platform === platform);
+                      if (!hasAccount) return null;
+                      return (
+                        <PlatformIcon key={platform} platform={platform as Platform} size="md" />
+                      );
+                    })}
                   </div>
                 )}
 
                 {/* Connect Account Button */}
-                {!isConnected(profile) && profile.uploadpost_username && (
+                {profile.uploadpost_username && (
                   <Button
                     variant="outline"
                     size="sm"

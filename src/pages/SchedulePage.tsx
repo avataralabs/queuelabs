@@ -16,29 +16,84 @@ import {
 } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight, Calendar, Clock, Settings } from 'lucide-react';
 import { subDays, addDays, startOfDay, isToday } from 'date-fns';
+import { Platform } from '@/types';
+
+// Type untuk account item di dropdown
+type AccountItem = {
+  profileId: string;
+  profileName: string;
+  platform: Platform;
+  username?: string;
+};
 
 export default function SchedulePage() {
   const [searchParams] = useSearchParams();
   const { profiles, isLoading: profilesLoading } = useProfiles();
-  const [selectedProfileId, setSelectedProfileId] = useState<string>('');
+  const [selectedValue, setSelectedValue] = useState<string>('');
   const [baseDate, setBaseDate] = useState(new Date());
   const [showSlotManager, setShowSlotManager] = useState(false);
   
+  // Flatten profiles menjadi account items (1 connected account = 1 dropdown item)
+  const accountItems = useMemo(() => {
+    const items: AccountItem[] = [];
+    
+    profiles.forEach(profile => {
+      if (profile.connected_accounts && profile.connected_accounts.length > 0) {
+        // Tambah setiap connected account sebagai item terpisah
+        profile.connected_accounts.forEach(acc => {
+          if (['tiktok', 'instagram', 'youtube'].includes(acc.platform)) {
+            items.push({
+              profileId: profile.id,
+              profileName: profile.name,
+              platform: acc.platform as Platform,
+              username: acc.username
+            });
+          }
+        });
+      } else {
+        // Fallback: gunakan platform utama jika belum ada connected accounts
+        items.push({
+          profileId: profile.id,
+          profileName: profile.name,
+          platform: profile.platform,
+          username: undefined
+        });
+      }
+    });
+    
+    return items;
+  }, [profiles]);
+  
+  // Parse selected value
+  const selectedProfileId = selectedValue.split('|')[0];
+  const selectedPlatform = selectedValue.split('|')[1] as Platform | undefined;
+  const selectedProfile = profiles.find(p => p.id === selectedProfileId);
+  
   const { slots: profileSlots } = useScheduleSlots(selectedProfileId);
   
-  // Set initial profile when loaded
+  // Set initial selection when loaded
   useEffect(() => {
-    if (profiles.length > 0 && !selectedProfileId) {
+    if (accountItems.length > 0 && !selectedValue) {
       const profileParam = searchParams.get('profile');
-      if (profileParam && profiles.some(p => p.id === profileParam)) {
-        setSelectedProfileId(profileParam);
-      } else {
-        setSelectedProfileId(profiles[0].id);
+      const platformParam = searchParams.get('platform');
+      
+      if (profileParam && platformParam) {
+        const found = accountItems.find(
+          item => item.profileId === profileParam && item.platform === platformParam
+        );
+        if (found) {
+          setSelectedValue(`${found.profileId}|${found.platform}`);
+          return;
+        }
       }
+      
+      // Default: pilih item pertama
+      const first = accountItems[0];
+      setSelectedValue(`${first.profileId}|${first.platform}`);
     }
-  }, [profiles, selectedProfileId, searchParams]);
+  }, [accountItems, selectedValue, searchParams]);
   
-  const selectedProfile = profiles.find(p => p.id === selectedProfileId);
+  // selectedProfile is already defined above
   
   // Generate 4 days: yesterday, today, tomorrow, day after
   const displayDates = useMemo(() => {
@@ -108,16 +163,26 @@ export default function SchedulePage() {
             <div className="glass rounded-xl border border-border p-4">
               <div className="flex items-center justify-between flex-wrap gap-4">
                 <div className="flex items-center gap-4">
-                  <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
-                    <SelectTrigger className="w-[250px]">
-                      <SelectValue placeholder="Select profile" />
+                  <Select value={selectedValue} onValueChange={setSelectedValue}>
+                    <SelectTrigger className="w-[280px]">
+                      {selectedProfile && selectedPlatform ? (
+                        <div className="flex items-center gap-2">
+                          <PlatformBadge platform={selectedPlatform} size="sm" showLabel={false} />
+                          <span>{selectedProfile.name}</span>
+                        </div>
+                      ) : (
+                        <SelectValue placeholder="Select account" />
+                      )}
                     </SelectTrigger>
                     <SelectContent>
-                      {profiles.map(profile => (
-                        <SelectItem key={profile.id} value={profile.id}>
+                      {accountItems.map((item, index) => (
+                        <SelectItem 
+                          key={`${item.profileId}-${item.platform}-${index}`} 
+                          value={`${item.profileId}|${item.platform}`}
+                        >
                           <div className="flex items-center gap-2">
-                            <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />
-                            <span>{profile.name}</span>
+                            <PlatformBadge platform={item.platform} size="sm" showLabel={false} />
+                            <span>{item.profileName}</span>
                           </div>
                         </SelectItem>
                       ))}

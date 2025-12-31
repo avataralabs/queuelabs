@@ -10,6 +10,7 @@ export interface Profile {
 export interface ScheduleSlot {
   id: string;
   profileId: string;
+  platform: string;
   hour: number;
   minute: number;
   isActive: boolean;

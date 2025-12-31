@@ -15,12 +15,13 @@ import { toast } from 'sonner';
 
 interface TimelineGraphProps {
   profileId: string;
+  platform: string;
   dates: Date[];
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-export function TimelineGraph({ profileId, dates }: TimelineGraphProps) {
+export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps) {
   const { 
     scheduleSlots, 
     scheduledContents, 
@@ -42,7 +43,12 @@ export function TimelineGraph({ profileId, dates }: TimelineGraphProps) {
   const [draggedItem, setDraggedItem] = useState<ScheduledContent | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<{ date: Date; hour: number } | null>(null);
   
-  const profileSlots = scheduleSlots.filter(s => s.profileId === profileId && s.isActive);
+  // Filter slots by profileId AND platform
+  const profileSlots = scheduleSlots.filter(s => 
+    s.profileId === profileId && 
+    (s as any).platform === platform && 
+    s.isActive
+  );
   const pendingContents = getPendingContents();
   
   const getScheduledContentForSlot = (date: Date, hour: number): ScheduledContent | undefined => {

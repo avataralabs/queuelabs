@@ -112,6 +112,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           minute: number
+          platform: string
           profile_id: string
           type: string
           user_id: string
@@ -122,6 +123,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           minute?: number
+          platform: string
           profile_id: string
           type?: string
           user_id: string
@@ -132,6 +134,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           minute?: number
+          platform?: string
           profile_id?: string
           type?: string
           user_id?: string

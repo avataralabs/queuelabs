@@ -69,7 +69,7 @@ export default function SchedulePage() {
   const selectedPlatform = selectedValue.split('|')[1] as Platform | undefined;
   const selectedProfile = profiles.find(p => p.id === selectedProfileId);
   
-  const { slots: profileSlots } = useScheduleSlots(selectedProfileId);
+  const { slots: profileSlots } = useScheduleSlots(selectedProfileId, selectedPlatform);
   
   // Set initial selection when loaded
   useEffect(() => {
@@ -218,17 +218,19 @@ export default function SchedulePage() {
             </div>
             
             {/* Slot Manager */}
-            {showSlotManager && selectedProfile && (
+            {showSlotManager && selectedProfile && selectedPlatform && (
               <ScheduleSlotManager 
-                profileId={selectedProfileId} 
+                profileId={selectedProfileId}
+                platform={selectedPlatform}
                 onClose={() => setShowSlotManager(false)}
               />
             )}
             
             {/* Timeline Graph */}
-            {selectedProfile && (
+            {selectedProfile && selectedPlatform && (
               <TimelineGraph 
                 profileId={selectedProfileId}
+                platform={selectedPlatform}
                 dates={displayDates}
               />
             )}

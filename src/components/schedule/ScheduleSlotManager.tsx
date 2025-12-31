@@ -14,14 +14,15 @@ import { cn } from '@/lib/utils';
 
 interface ScheduleSlotManagerProps {
   profileId: string;
+  platform: string;
   onClose: () => void;
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export function ScheduleSlotManager({ profileId, onClose }: ScheduleSlotManagerProps) {
-  const { slots, addSlot, updateSlot, deleteSlot } = useScheduleSlots(profileId);
+export function ScheduleSlotManager({ profileId, platform, onClose }: ScheduleSlotManagerProps) {
+  const { slots, addSlot, updateSlot, deleteSlot } = useScheduleSlots(profileId, platform);
   
   const [newSlot, setNewSlot] = useState({
     hour: 12,
@@ -33,6 +34,7 @@ export function ScheduleSlotManager({ profileId, onClose }: ScheduleSlotManagerP
   const handleAddSlot = () => {
     addSlot.mutate({
       profile_id: profileId,
+      platform: platform,
       hour: newSlot.hour,
       minute: newSlot.minute,
       type: newSlot.type,

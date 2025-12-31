@@ -14,15 +14,16 @@ export interface ScheduleSlot {
   type: SlotType;
   week_days: number[] | null;
   user_id: string;
+  platform: string;
 }
 
-export function useScheduleSlots(profileId?: string) {
+export function useScheduleSlots(profileId?: string, platform?: string) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['schedule_slots', user?.id, profileId],
+    queryKey: ['schedule_slots', user?.id, profileId, platform],
     queryFn: async () => {
       if (!user) return [];
       let q = supabase
@@ -32,6 +33,10 @@ export function useScheduleSlots(profileId?: string) {
       
       if (profileId) {
         q = q.eq('profile_id', profileId);
+      }
+      
+      if (platform) {
+        q = q.eq('platform', platform);
       }
       
       const { data, error } = await q;

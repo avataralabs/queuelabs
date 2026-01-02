@@ -384,11 +384,10 @@ export default function ContentPage() {
                       ? `${String(contentSlot.hour).padStart(2, '0')}:${String(contentSlot.minute).padStart(2, '0')}`
                       : null;
                     
-                    // Get connected account for display_name
+                    // Get connected account for profile picture
                     const connectedAccount = profile?.connected_accounts?.find(
                       (acc: ConnectedAccount) => acc.platform === profile.platform
                     ) as ConnectedAccount | undefined;
-                    const displayName = connectedAccount?.display_name || connectedAccount?.username || profile?.name;
                     
                     return (
                       <div 
@@ -401,7 +400,7 @@ export default function ContentPage() {
                             {connectedAccount?.profile_picture ? (
                               <img 
                                 src={connectedAccount.profile_picture} 
-                                alt={displayName}
+                                alt={connectedAccount.username}
                                 className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                               />
                             ) : (
@@ -420,31 +419,22 @@ export default function ContentPage() {
                               {profile && (
                                 <div className="flex items-center gap-2 mt-1">
                                   <PlatformIcon platform={profile.platform as Platform} className="w-4 h-4 text-muted-foreground" />
-                                  <span className="text-sm text-muted-foreground">{displayName}</span>
+                                  <span className="text-sm text-muted-foreground">{connectedAccount?.username || profile.name}</span>
+                                  {slotTime && (
+                                    <span className="text-sm text-muted-foreground">• {slotTime}</span>
+                                  )}
                                 </div>
-                              )}
-                              {content.caption && (
-                                <p className="text-sm text-muted-foreground truncate mt-1">
-                                  {content.caption}
-                                </p>
                               )}
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-1">
-                            <span className={cn(
-                              "px-3 py-1 rounded-full text-xs font-medium",
-                              content.status === 'scheduled' 
-                                ? "bg-primary/10 text-primary" 
-                                : "bg-warning/10 text-warning"
-                            )}>
-                              {content.status === 'scheduled' ? 'Scheduled' : 'Assigned'}
-                            </span>
-                            {slotTime && (
-                              <span className="px-3 py-1 rounded-full text-xs font-medium bg-secondary text-muted-foreground">
-                                {slotTime}
-                              </span>
-                            )}
-                          </div>
+                          <span className={cn(
+                            "px-3 py-1 rounded-full text-xs font-medium",
+                            content.status === 'scheduled' 
+                              ? "bg-primary/10 text-primary" 
+                              : "bg-warning/10 text-warning"
+                          )}>
+                            {content.status === 'scheduled' ? 'Scheduled' : 'Assigned'}
+                          </span>
                         </div>
                       </div>
                     );
@@ -560,7 +550,7 @@ export default function ContentPage() {
                       {account.profile_picture ? (
                         <img 
                           src={account.profile_picture} 
-                          alt={account.display_name || account.username}
+                          alt={account.username}
                           className="w-10 h-10 rounded-full object-cover"
                         />
                       ) : (
@@ -571,7 +561,7 @@ export default function ContentPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
-                          <span className="font-medium">{account.display_name || account.username}</span>
+                          <span className="font-medium">{account.username}</span>
                         </div>
                         <p className="text-sm text-muted-foreground">
                           {profile.name}

@@ -9,7 +9,6 @@ export type Platform = 'tiktok' | 'instagram' | 'youtube';
 export interface ConnectedAccount {
   platform: string;
   username: string;
-  display_name?: string;
   profile_picture?: string;
   connected_at?: string;
 }

@@ -178,28 +178,89 @@ export default function ContentPage() {
     return selectedSlots.some(s => s.slotId === slotId);
   };
   
-  const handleMultiAssign = () => {
+  // Find next available date for a specific slot (for auto-assign)
+  const findNextAvailableDateForSlot = (slotId: string): Date => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const slot = slots.find(s => s.id === slotId);
+    if (!slot) return today;
+    
+    // Get all dates that already have content assigned to this slot
+    const occupiedDates = contents
+      .filter(c => c.scheduled_slot_id === slotId && (c.status === 'assigned' || c.status === 'scheduled'))
+      .map(c => {
+        if (!c.scheduled_at) return null;
+        const d = new Date(c.scheduled_at);
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      })
+      .filter(Boolean);
+    
+    // Find the first available date starting from today
+    for (let i = 0; i < 365; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() + i);
+      
+      // For weekly slots, check if this day of week is active
+      if (slot.type === 'weekly' && slot.week_days) {
+        if (!slot.week_days.includes(checkDate.getDay())) {
+          continue;
+        }
+      }
+      
+      const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
+      if (!occupiedDates.includes(dateKey)) {
+        return checkDate;
+      }
+    }
+    
+    return today; // fallback
+  };
+  
+  const handleMultiAssign = async () => {
     if (!selectedContentId || selectedSlots.length === 0) return;
     
-    // For now, assign to the first selected slot
-    // In the future, could duplicate content for multiple slots
-    const firstSlot = selectedSlots[0];
+    const originalContent = contents.find(c => c.id === selectedContentId);
+    if (!originalContent) return;
     
-    updateContent.mutate({
-      id: selectedContentId,
-      assigned_profile_id: firstSlot.profileId,
-      scheduled_slot_id: firstSlot.slotId,
-      status: 'assigned',
-      removed_at: null,
-      removed_from_profile_id: null
-    });
-    
-    // If multiple slots selected, create copies for each additional slot
-    if (selectedSlots.length > 1) {
-      toast.info(`Assigned to ${selectedSlots.length} slots (first slot used, multi-slot requires duplication)`);
-    } else {
-      toast.success('Content assigned to profile');
+    // Process each selected slot
+    for (let i = 0; i < selectedSlots.length; i++) {
+      const slotData = selectedSlots[i];
+      const slot = slots.find(s => s.id === slotData.slotId);
+      
+      // Find next available date for this slot
+      const scheduledDate = findNextAvailableDateForSlot(slotData.slotId);
+      scheduledDate.setHours(slot?.hour || 0, slot?.minute || 0, 0, 0);
+      
+      if (i === 0) {
+        // First slot: update original content
+        updateContent.mutate({
+          id: selectedContentId,
+          assigned_profile_id: slotData.profileId,
+          scheduled_slot_id: slotData.slotId,
+          scheduled_at: scheduledDate.toISOString(),
+          status: 'assigned',
+          removed_at: null,
+          removed_from_profile_id: null
+        });
+      } else {
+        // Additional slots: create duplicate content
+        addContent.mutate({
+          file_name: originalContent.file_name,
+          caption: originalContent.caption,
+          file_size: originalContent.file_size,
+          file_url: originalContent.file_url,
+          assigned_profile_id: slotData.profileId,
+          scheduled_slot_id: slotData.slotId,
+          scheduled_at: scheduledDate.toISOString(),
+          status: 'assigned',
+          removed_at: null,
+          removed_from_profile_id: null
+        });
+      }
     }
+    
+    toast.success(`Content assigned to ${selectedSlots.length} slot${selectedSlots.length > 1 ? 's' : ''}`);
     
     setAssignDialogOpen(false);
     setSelectedContentId(null);
@@ -424,10 +485,18 @@ export default function ContentPage() {
                       ? `${String(contentSlot.hour).padStart(2, '0')}:${String(contentSlot.minute).padStart(2, '0')}`
                       : null;
                     
-                    // Get connected account for profile picture
+                    // Get platform from slot (not profile) for correct icon
+                    const slotPlatform = contentSlot?.platform;
+                    
+                    // Get connected account for profile picture - use slot platform
                     const connectedAccount = profile?.connected_accounts?.find(
-                      (acc: ConnectedAccount) => acc.platform === profile.platform
+                      (acc: ConnectedAccount) => acc.platform === (slotPlatform || profile.platform)
                     ) as ConnectedAccount | undefined;
+                    
+                    // Format scheduled date if available
+                    const scheduledDate = content.scheduled_at 
+                      ? format(new Date(content.scheduled_at), 'MMM d')
+                      : null;
                     
                     return (
                       <div 
@@ -445,7 +514,9 @@ export default function ContentPage() {
                               />
                             ) : (
                               <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
-                                {profile ? (
+                                {slotPlatform ? (
+                                  <PlatformIcon platform={slotPlatform as Platform} className="w-5 h-5" />
+                                ) : profile ? (
                                   <PlatformIcon platform={profile.platform as Platform} className="w-5 h-5" />
                                 ) : (
                                   <FileVideo className="w-5 h-5 text-primary" />
@@ -456,19 +527,28 @@ export default function ContentPage() {
                               <p className="font-medium truncate" title={content.file_name}>
                                 {content.file_name}
                               </p>
-                              {profile && (
+                              {(profile || slotPlatform) && (
                                 <div className="flex items-center gap-2 mt-1">
-                                  <PlatformIcon platform={profile.platform as Platform} className="w-4 h-4 text-muted-foreground" />
-                                  <span className="text-sm text-muted-foreground">@{connectedAccount?.username || profile.name}</span>
+                                  <PlatformIcon platform={(slotPlatform || profile?.platform) as Platform} className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-sm text-muted-foreground">@{connectedAccount?.username || profile?.name}</span>
                                   {slotTime && (
                                     <span className="text-sm text-muted-foreground">• {slotTime}</span>
                                   )}
+                                  {scheduledDate && (
+                                    <span className="text-sm text-muted-foreground">• {scheduledDate}</span>
+                                  )}
                                 </div>
+                              )}
+                              {/* Caption - same as Pending tab */}
+                              {content.caption && (
+                                <p className="text-sm text-muted-foreground truncate mt-1">
+                                  {content.caption}
+                                </p>
                               )}
                             </div>
                           </div>
                           <span className={cn(
-                            "px-3 py-1 rounded-full text-xs font-medium",
+                            "px-3 py-1 rounded-full text-xs font-medium flex-shrink-0",
                             content.status === 'scheduled' 
                               ? "bg-primary/10 text-primary" 
                               : "bg-warning/10 text-warning"

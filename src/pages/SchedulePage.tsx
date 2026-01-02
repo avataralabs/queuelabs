@@ -73,33 +73,40 @@ export default function SchedulePage() {
   
   // Set initial selection when loaded
   useEffect(() => {
-    if (accountItems.length > 0 && !selectedValue) {
-      const profileParam = searchParams.get('profile');
-      const platformParam = searchParams.get('platform');
-      
-      if (profileParam && platformParam) {
-        const found = accountItems.find(
-          item => item.profileId === profileParam && item.platform === platformParam
-        );
-        if (found) {
-          setSelectedValue(`${found.profileId}|${found.platform}`);
-        }
-      } else if (profileParam) {
-        // If only profile is provided, find first matching account
-        const found = accountItems.find(item => item.profileId === profileParam);
-        if (found) {
-          setSelectedValue(`${found.profileId}|${found.platform}`);
-        }
-      }
-      
-      // Default: pilih item pertama if nothing matched
-      if (!selectedValue) {
-        const first = accountItems[0];
-        setSelectedValue(`${first.profileId}|${first.platform}`);
+    if (accountItems.length === 0) return;
+    
+    const profileParam = searchParams.get('profile');
+    const platformParam = searchParams.get('platform');
+    
+    // Priority 1: URL params with profile + platform
+    if (profileParam && platformParam) {
+      const found = accountItems.find(
+        item => item.profileId === profileParam && item.platform === platformParam
+      );
+      if (found) {
+        setSelectedValue(`${found.profileId}|${found.platform}`);
+        return; // Important: return after setting value from URL
       }
     }
     
-    // Handle date parameter for baseDate
+    // Priority 2: URL param with profile only
+    if (profileParam) {
+      const found = accountItems.find(item => item.profileId === profileParam);
+      if (found) {
+        setSelectedValue(`${found.profileId}|${found.platform}`);
+        return;
+      }
+    }
+    
+    // Priority 3: Default to first item ONLY if no selection yet
+    if (!selectedValue) {
+      const first = accountItems[0];
+      setSelectedValue(`${first.profileId}|${first.platform}`);
+    }
+  }, [accountItems, searchParams]);
+  
+  // Handle date parameter separately
+  useEffect(() => {
     const dateParam = searchParams.get('date');
     if (dateParam) {
       const targetDate = parseISO(dateParam);
@@ -107,7 +114,7 @@ export default function SchedulePage() {
         setBaseDate(targetDate);
       }
     }
-  }, [accountItems, selectedValue, searchParams]);
+  }, [searchParams]);
   
   // selectedProfile is already defined above
   

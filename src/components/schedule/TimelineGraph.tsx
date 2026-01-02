@@ -8,7 +8,8 @@ import {
   DialogHeader, 
   DialogTitle,
 } from '@/components/ui/dialog';
-import { format, isToday, isBefore, startOfDay } from 'date-fns';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { format, isToday, isBefore } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { FileVideo, Calendar, Clock, Trash2, RotateCcw, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
@@ -29,7 +30,7 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
   const [selectedSlot, setSelectedSlot] = useState<{
     date: Date;
     hour: number;
-    content?: typeof contents[0];
+    contents: typeof contents;
   } | null>(null);
   
   const [draggedItem, setDraggedItem] = useState<typeof contents[0] | null>(null);
@@ -42,7 +43,7 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
     s.is_active
   );
   
-  // Get assigned/scheduled contents for this profile
+  // Get assigned/scheduled contents for this profile and platform
   const assignedContents = contents.filter(c => 
     c.assigned_profile_id === profileId &&
     c.scheduled_slot_id &&
@@ -51,11 +52,6 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
   
   // Get pending contents for scheduling
   const pendingContents = contents.filter(c => c.status === 'pending');
-  
-  // Get content assigned to a specific slot
-  const getContentForSlot = (slotId: string): typeof contents[0] | undefined => {
-    return assignedContents.find(c => c.scheduled_slot_id === slotId);
-  };
   
   const getSlotForHour = (hour: number): typeof profileSlots[0] | undefined => {
     return profileSlots.find(s => s.hour === hour);
@@ -71,14 +67,33 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
     return false;
   };
   
-  const getContentForHour = (date: Date, hour: number): typeof contents[0] | undefined => {
+  // Get all contents for a specific date and hour (supports multiple contents per slot)
+  const getContentsForSlot = (date: Date, hour: number): typeof contents => {
     const slot = getSlotForHour(hour);
-    if (!slot) return undefined;
-    return getContentForSlot(slot.id);
+    if (!slot) return [];
+    
+    return assignedContents.filter(c => {
+      if (c.scheduled_slot_id !== slot.id) return false;
+      
+      // If content has scheduled_at, match by date
+      if (c.scheduled_at) {
+        const contentDate = new Date(c.scheduled_at);
+        return (
+          contentDate.getFullYear() === date.getFullYear() &&
+          contentDate.getMonth() === date.getMonth() &&
+          contentDate.getDate() === date.getDate()
+        );
+      }
+      
+      // Legacy: content without scheduled_at shows on first date only (today)
+      return isToday(date);
+    });
   };
   
   const handleSlotClick = (date: Date, hour: number) => {
-    const content = getContentForHour(date, hour);
+    if (draggedItem) return; // Don't open dialog while dragging
+    
+    const slotContents = getContentsForSlot(date, hour);
     const hasSlot = hasSlotAtHour(hour, date);
     
     // Don't allow interaction with past slots
@@ -86,10 +101,8 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
     slotTime.setHours(hour, 0, 0, 0);
     if (isBefore(slotTime, new Date())) return;
     
-    if (content) {
-      setSelectedSlot({ date, hour, content });
-    } else if (hasSlot && pendingContents.length > 0) {
-      setSelectedSlot({ date, hour });
+    if (slotContents.length > 0 || (hasSlot && pendingContents.length > 0)) {
+      setSelectedSlot({ date, hour, contents: slotContents });
     }
   };
   
@@ -99,10 +112,15 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
     const slot = getSlotForHour(selectedSlot.hour);
     if (!slot) return;
     
+    // Set scheduled_at to the selected date and time
+    const scheduledAt = new Date(selectedSlot.date);
+    scheduledAt.setHours(slot.hour, slot.minute, 0, 0);
+    
     updateContent.mutate({
       id: contentId,
       assigned_profile_id: profileId,
       scheduled_slot_id: slot.id,
+      scheduled_at: scheduledAt.toISOString(),
       status: 'assigned',
     });
     
@@ -117,6 +135,7 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
       removed_at: new Date().toISOString(),
       removed_from_profile_id: profileId,
       scheduled_slot_id: null,
+      scheduled_at: null,
       assigned_profile_id: null,
     });
     setSelectedSlot(null);
@@ -128,6 +147,7 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
       id: contentId,
       status: 'pending',
       scheduled_slot_id: null,
+      scheduled_at: null,
       assigned_profile_id: null,
     });
     setSelectedSlot(null);
@@ -175,36 +195,21 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
     slotTime.setHours(hour, 0, 0, 0);
     if (isBefore(slotTime, new Date())) return;
     
-    const targetContent = getContentForHour(date, hour);
     const targetSlot = getSlotForHour(hour);
-    
     if (!targetSlot) return;
     
-    if (targetContent) {
-      // Swap with existing content
-      if (targetContent.id !== draggedItem.id) {
-        const draggedSlotId = draggedItem.scheduled_slot_id;
-        // Update target content to dragged item's slot
-        updateContent.mutate({
-          id: targetContent.id,
-          scheduled_slot_id: draggedSlotId,
-        });
-        // Update dragged item to target slot
-        updateContent.mutate({
-          id: draggedItem.id,
-          scheduled_slot_id: targetSlot.id,
-        });
-        toast.success('Content swapped');
-      }
-    } else {
-      // Move to empty slot
-      updateContent.mutate({
-        id: draggedItem.id,
-        scheduled_slot_id: targetSlot.id,
-      });
-      toast.success('Content moved');
-    }
+    // Create new scheduled_at with target date and slot time
+    const newScheduledAt = new Date(date);
+    newScheduledAt.setHours(targetSlot.hour, targetSlot.minute, 0, 0);
     
+    // Simply move to the new slot (allows stacking multiple contents)
+    updateContent.mutate({
+      id: draggedItem.id,
+      scheduled_slot_id: targetSlot.id,
+      scheduled_at: newScheduledAt.toISOString(),
+    });
+    
+    toast.success('Content moved');
     setDraggedItem(null);
   };
   
@@ -216,7 +221,7 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
           <div className="flex items-center gap-2 text-primary">
             <GripVertical className="w-4 h-4" />
             <span className="text-sm font-medium">
-              Dragging: Drop on empty slot to move, or on another content to swap
+              Dragging: {draggedItem.file_name} — Drop on any slot to move
             </span>
           </div>
           <Button variant="ghost" size="sm" onClick={handleDragEnd}>
@@ -260,69 +265,79 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
               
               {/* Day Slots */}
               {dates.map(date => {
-                const content = getContentForHour(date, hour);
+                const slotContents = getContentsForSlot(date, hour);
                 const hasSlot = hasSlotAtHour(hour, date);
                 const slotTime = new Date(date);
                 slotTime.setHours(hour, 0, 0, 0);
                 const isPast = isBefore(slotTime, new Date());
                 const isDragOver = dragOverSlot?.date.toISOString() === date.toISOString() && dragOverSlot?.hour === hour;
-                const isDragging = draggedItem?.id === content?.id;
+                const hasDraggedItemHere = slotContents.some(c => c.id === draggedItem?.id);
                 
                 return (
                   <div
                     key={`${date.toISOString()}-${hour}`}
-                    onClick={() => !draggedItem && handleSlotClick(date, hour)}
+                    onClick={() => handleSlotClick(date, hour)}
                     onDragOver={(e) => handleDragOver(e, date, hour)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, date, hour)}
                     className={cn(
                       "min-h-[50px] border-l border-border/50 p-1 transition-all duration-200",
-                      hasSlot && !content && !isPast && "bg-timeline-slot cursor-pointer hover:bg-timeline-slot-hover",
-                      content && "bg-timeline-slot-filled",
+                      hasSlot && slotContents.length === 0 && !isPast && "bg-timeline-slot cursor-pointer hover:bg-timeline-slot-hover",
+                      slotContents.length > 0 && "bg-timeline-slot-filled",
                       isPast && "opacity-50",
                       isToday(date) && "bg-primary/5",
-                      isDragOver && !isDragging && "ring-2 ring-primary bg-primary/20",
-                      isDragOver && content && !isDragging && "ring-2 ring-amber-400 bg-amber-100"
+                      isDragOver && !hasDraggedItemHere && "ring-2 ring-primary bg-primary/20",
+                      isDragOver && slotContents.length > 0 && !hasDraggedItemHere && "ring-2 ring-amber-400 bg-amber-100"
                     )}
                   >
-                    {content && (
-                      <div 
-                        draggable={!isPast}
-                        onDragStart={(e) => {
-                          e.stopPropagation();
-                          handleDragStart(e, content);
-                        }}
-                        onDragEnd={(e) => {
-                          e.stopPropagation();
-                          handleDragEnd();
-                        }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        className={cn(
-                          "h-full rounded-md p-2 text-xs transition-all duration-200 select-none",
-                          !isPast && "cursor-grab active:cursor-grabbing",
-                          "bg-primary/20 border border-primary/30 hover:bg-primary/30",
-                          isDragging && "opacity-50 ring-2 ring-primary"
+                    {slotContents.length > 0 ? (
+                      <div className={cn(
+                        "h-full space-y-1",
+                        slotContents.length > 2 && "max-h-[80px] overflow-y-auto scrollbar-thin"
+                      )}>
+                        {slotContents.map((content, idx) => (
+                          <div 
+                            key={content.id}
+                            draggable={!isPast}
+                            onDragStart={(e) => {
+                              e.stopPropagation();
+                              handleDragStart(e, content);
+                            }}
+                            onDragEnd={(e) => {
+                              e.stopPropagation();
+                              handleDragEnd();
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            className={cn(
+                              "rounded-md p-1.5 text-xs transition-all duration-200 select-none",
+                              !isPast && "cursor-grab active:cursor-grabbing",
+                              "bg-primary/20 border border-primary/30 hover:bg-primary/30",
+                              draggedItem?.id === content.id && "opacity-50 ring-2 ring-primary"
+                            )}
+                          >
+                            <div className="flex items-center gap-1">
+                              <GripVertical className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                              <p className="font-medium truncate flex-1" title={content.file_name}>
+                                {content.file_name.length > 10 
+                                  ? `${content.file_name.slice(0, 10)}...` 
+                                  : content.file_name
+                                }
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                        {/* Badge showing count if more than 1 */}
+                        {slotContents.length > 1 && (
+                          <div className="text-[10px] text-center text-muted-foreground">
+                            {slotContents.length} items
+                          </div>
                         )}
-                      >
-                        <div className="flex items-center gap-1">
-                          <GripVertical className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                          <p className="font-medium truncate flex-1" title={content.file_name}>
-                            {content.file_name.length > 12 
-                              ? `${content.file_name.slice(0, 12)}...` 
-                              : content.file_name
-                            }
-                          </p>
-                        </div>
-                        <p className="text-muted-foreground mt-0.5 ml-4">
-                          {hour.toString().padStart(2, '0')}:00
-                        </p>
                       </div>
-                    )}
-                    {hasSlot && !content && !isPast && (
+                    ) : hasSlot && !isPast ? (
                       <div className="h-full flex items-center justify-center text-muted-foreground opacity-0 hover:opacity-100 transition-opacity">
                         <span className="text-xs">+ Add</span>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 );
               })}
@@ -335,7 +350,9 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
           <DialogContent className="glass border-border">
             <DialogHeader>
               <DialogTitle>
-                {selectedSlot?.content ? 'Manage Scheduled Content' : 'Add Content'}
+                {selectedSlot?.contents && selectedSlot.contents.length > 0 
+                  ? `Manage Content (${selectedSlot.contents.length})` 
+                  : 'Add Content'}
               </DialogTitle>
             </DialogHeader>
             
@@ -348,46 +365,69 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
                   <span>{selectedSlot.hour.toString().padStart(2, '0')}:00</span>
                 </div>
                 
-                {selectedSlot.content ? (
+                {selectedSlot.contents && selectedSlot.contents.length > 0 ? (
                   <div className="space-y-4">
-                    <div className="p-4 rounded-lg bg-secondary/30">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <FileVideo className="w-6 h-6 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-medium">{selectedSlot.content.file_name}</p>
-                          <p className="text-sm text-muted-foreground truncate max-w-[250px]">
-                            {selectedSlot.content.caption || 'No caption'}
-                          </p>
+                    <ScrollArea className="max-h-[300px]">
+                      <div className="space-y-3">
+                        {selectedSlot.contents.map(content => (
+                          <div key={content.id} className="p-4 rounded-lg bg-secondary/30">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                <FileVideo className="w-6 h-6 text-primary" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate">{content.file_name}</p>
+                                <p className="text-sm text-muted-foreground truncate">
+                                  {content.caption || 'No caption'}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2 mt-3">
+                              <Button 
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleUnschedule(content.id)}
+                              >
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                Unschedule
+                              </Button>
+                              <Button 
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleRemoveFromSchedule(content.id)}
+                              >
+                                <Trash2 className="w-3 h-3 mr-1" />
+                                Remove
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                    
+                    <p className="text-xs text-muted-foreground">
+                      💡 Tip: Drag content to move to another slot
+                    </p>
+                    
+                    {/* Option to add more content */}
+                    {pendingContents.length > 0 && (
+                      <div className="border-t border-border pt-4">
+                        <p className="text-sm text-muted-foreground mb-2">Add more content:</p>
+                        <div className="space-y-2 max-h-[150px] overflow-y-auto">
+                          {pendingContents.slice(0, 3).map(content => (
+                            <button
+                              key={content.id}
+                              onClick={() => handleAssignContent(content.id)}
+                              className="w-full p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors flex items-center gap-2 text-left text-sm"
+                            >
+                              <FileVideo className="w-4 h-4 text-primary flex-shrink-0" />
+                              <span className="truncate">{content.file_name}</span>
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    </div>
-                    
-                    <p className="text-xs text-muted-foreground">
-                      💡 Tip: Drag content to move or swap with another
-                    </p>
-                    
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button 
-                        variant="outline"
-                        onClick={() => handleUnschedule(selectedSlot.content!.id)}
-                      >
-                        <RotateCcw className="w-4 h-4 mr-1" />
-                        Unschedule
-                      </Button>
-                      <Button 
-                        variant="destructive"
-                        onClick={() => handleRemoveFromSchedule(selectedSlot.content!.id)}
-                      >
-                        <Trash2 className="w-4 h-4 mr-1" />
-                        Remove
-                      </Button>
-                    </div>
-                    
-                    <p className="text-xs text-muted-foreground">
-                      <strong>Unschedule:</strong> Back to pending • <strong>Remove:</strong> Move to trash
-                    </p>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2">

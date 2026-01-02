@@ -61,16 +61,27 @@ Deno.serve(async (req) => {
 
     // Parse connected accounts from social_accounts
     const socialAccounts = result?.profile?.social_accounts || result?.social_accounts || {};
-    const connectedAccounts: Array<{ platform: string; username: string; profile_picture?: string; connected_at: string }> = [];
+    const connectedAccounts: Array<{ platform: string; username: string; display_name?: string; profile_picture?: string; connected_at: string }> = [];
     const platformOrder = ['tiktok', 'instagram', 'youtube'];
     
     for (const platform of platformOrder) {
       const accountData = socialAccounts[platform];
       // Check if platform has actual data (not empty string, not null/undefined)
       if (accountData && typeof accountData === 'object' && Object.keys(accountData).length > 0) {
+        // Get display name based on platform
+        let displayName = '';
+        if (platform === 'instagram') {
+          displayName = accountData.display_name || accountData.handle || '';
+        } else if (platform === 'youtube') {
+          displayName = accountData.title || accountData.handle || '';
+        } else if (platform === 'tiktok') {
+          displayName = accountData.display_name || accountData.name || '';
+        }
+        
         connectedAccounts.push({
           platform,
-          username: accountData.username || accountData.name || '',
+          username: accountData.username || accountData.id || '',
+          display_name: displayName,
           profile_picture: accountData.profile_picture || accountData.avatar || '',
           connected_at: new Date().toISOString()
         });

@@ -215,6 +215,22 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
     const targetSlot = getSlotForHour(hour);
     if (!targetSlot) return;
     
+    // Check if dropping to the same slot and same date - skip if so
+    const sourceSlotId = draggedItem.scheduled_slot_id;
+    const sourceDate = draggedItem.scheduled_at ? new Date(draggedItem.scheduled_at) : null;
+    
+    if (sourceSlotId === targetSlot.id && sourceDate) {
+      const isSameDate = 
+        sourceDate.getFullYear() === date.getFullYear() &&
+        sourceDate.getMonth() === date.getMonth() &&
+        sourceDate.getDate() === date.getDate();
+      
+      if (isSameDate) {
+        setDraggedItem(null);
+        return; // Don't do anything if dropping to the same slot
+      }
+    }
+    
     // Create new scheduled_at with target date and slot time
     const newScheduledAt = new Date(date);
     newScheduledAt.setHours(targetSlot.hour, targetSlot.minute, 0, 0);
@@ -391,37 +407,35 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                     <ScrollArea className="max-h-[300px]">
                       <div className="space-y-3">
                         {selectedSlot.contents.map(content => (
-                          <div key={content.id} className="p-4 rounded-lg bg-secondary/30 overflow-hidden">
-                            <div className="flex items-center gap-3 overflow-hidden">
+                          <div key={content.id} className="p-4 rounded-lg bg-secondary/30">
+                            <div className="flex items-center gap-3">
                               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                                 <FileVideo className="w-6 h-6 text-primary" />
                               </div>
-                              <div className="min-w-0 flex-1 overflow-hidden">
-                                <p className="font-medium truncate">{content.file_name}</p>
-                                <p className="text-sm text-muted-foreground truncate">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate" title={content.file_name}>{content.file_name}</p>
+                                <p className="text-sm text-muted-foreground truncate" title={content.caption || 'No caption'}>
                                   {content.caption || 'No caption'}
                                 </p>
                               </div>
                             </div>
                             
-                            <div className="flex gap-2 mt-3">
+                            <div className="grid grid-cols-2 gap-2 mt-3">
                               <Button 
                                 variant="outline"
                                 size="sm"
-                                className="flex-1 min-w-0"
                                 onClick={() => handleUnschedule(content.id)}
                               >
-                                <RotateCcw className="w-3 h-3 mr-1 flex-shrink-0" />
-                                <span className="truncate">Unschedule</span>
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                Unschedule
                               </Button>
                               <Button 
                                 variant="destructive"
                                 size="sm"
-                                className="flex-1 min-w-0"
                                 onClick={() => handleRemoveFromSchedule(content.id)}
                               >
-                                <Trash2 className="w-3 h-3 mr-1 flex-shrink-0" />
-                                <span className="truncate">Remove</span>
+                                <Trash2 className="w-3 h-3 mr-1" />
+                                Remove
                               </Button>
                             </div>
                           </div>

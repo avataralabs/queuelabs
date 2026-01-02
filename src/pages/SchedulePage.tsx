@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight, Calendar, Clock, Settings } from 'lucide-react';
-import { subDays, addDays, startOfDay, isToday } from 'date-fns';
+import { subDays, addDays, startOfDay, isToday, parseISO } from 'date-fns';
 import { Platform } from '@/types';
 
 // Type untuk account item di dropdown
@@ -83,13 +83,29 @@ export default function SchedulePage() {
         );
         if (found) {
           setSelectedValue(`${found.profileId}|${found.platform}`);
-          return;
+        }
+      } else if (profileParam) {
+        // If only profile is provided, find first matching account
+        const found = accountItems.find(item => item.profileId === profileParam);
+        if (found) {
+          setSelectedValue(`${found.profileId}|${found.platform}`);
         }
       }
       
-      // Default: pilih item pertama
-      const first = accountItems[0];
-      setSelectedValue(`${first.profileId}|${first.platform}`);
+      // Default: pilih item pertama if nothing matched
+      if (!selectedValue) {
+        const first = accountItems[0];
+        setSelectedValue(`${first.profileId}|${first.platform}`);
+      }
+    }
+    
+    // Handle date parameter for baseDate
+    const dateParam = searchParams.get('date');
+    if (dateParam) {
+      const targetDate = parseISO(dateParam);
+      if (!isNaN(targetDate.getTime())) {
+        setBaseDate(targetDate);
+      }
     }
   }, [accountItems, selectedValue, searchParams]);
   
@@ -110,6 +126,10 @@ export default function SchedulePage() {
   };
   
   const activeSlots = profileSlots.filter(s => s.is_active);
+  
+  // Get URL params for auto-scroll and highlight
+  const scrollToHour = searchParams.get('hour') ? parseInt(searchParams.get('hour')!) : null;
+  const highlightContentId = searchParams.get('contentId');
   
   if (profilesLoading) {
     return (
@@ -232,6 +252,8 @@ export default function SchedulePage() {
                 profileId={selectedProfileId}
                 platform={selectedPlatform}
                 dates={displayDates}
+                scrollToHour={scrollToHour}
+                highlightContentId={highlightContentId}
               />
             )}
           </>

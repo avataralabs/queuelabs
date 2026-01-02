@@ -281,7 +281,23 @@ export default function ContentPage() {
   
   const handleAssignedContentClick = (content: typeof assignedContents[0]) => {
     if (content.assigned_profile_id) {
-      navigate(`/schedule?profile=${content.assigned_profile_id}`);
+      const contentSlot = slots.find(s => s.id === content.scheduled_slot_id);
+      const params = new URLSearchParams();
+      
+      params.set('profile', content.assigned_profile_id);
+      
+      if (contentSlot) {
+        params.set('platform', contentSlot.platform);
+        params.set('hour', String(contentSlot.hour));
+      }
+      
+      if (content.scheduled_at) {
+        params.set('date', content.scheduled_at.split('T')[0]);
+      }
+      
+      params.set('contentId', content.id);
+      
+      navigate(`/schedule?${params.toString()}`);
     }
   };
   

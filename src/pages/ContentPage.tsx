@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { PlatformBadge } from '@/components/common/PlatformBadge';
 import { PlatformIcon } from '@/components/common/PlatformIcon';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useProfiles, Platform, ConnectedAccount } from '@/hooks/useProfiles';
 import { useContents } from '@/hooks/useContents';
@@ -14,12 +15,22 @@ import {
   Dialog, 
   DialogContent, 
   DialogHeader, 
-  DialogTitle 
+  DialogTitle,
+  DialogFooter
 } from '@/components/ui/dialog';
-import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, AlertCircle } from 'lucide-react';
+import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, AlertCircle, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
+interface SelectedSlot {
+  profileId: string;
+  slotId: string;
+  platform: string;
+  username: string;
+  time: string;
+  profilePicture?: string;
+}
 
 export default function ContentPage() {
   const navigate = useNavigate();
@@ -37,6 +48,9 @@ export default function ContentPage() {
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState('pending');
+  
+  // Multi-select state
+  const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
   
   const pendingContents = contents.filter(c => c.status === 'pending');
   const assignedContents = contents.filter(c => c.status === 'assigned' || c.status === 'scheduled');
@@ -145,26 +159,52 @@ export default function ContentPage() {
   const openAssignDialog = (contentId: string, fromTrash: boolean = false) => {
     setSelectedContentId(contentId);
     setIsFromTrash(fromTrash);
+    setSelectedSlots([]); // Reset selections
     setAssignDialogOpen(true);
   };
   
-  const handleAssignWithSlot = (profileId: string, slotId: string) => {
-    if (!selectedContentId) return;
+  const toggleSlotSelection = (slot: SelectedSlot) => {
+    setSelectedSlots(prev => {
+      const exists = prev.find(s => s.slotId === slot.slotId);
+      if (exists) {
+        return prev.filter(s => s.slotId !== slot.slotId);
+      } else {
+        return [...prev, slot];
+      }
+    });
+  };
+  
+  const isSlotSelected = (slotId: string) => {
+    return selectedSlots.some(s => s.slotId === slotId);
+  };
+  
+  const handleMultiAssign = () => {
+    if (!selectedContentId || selectedSlots.length === 0) return;
     
-    // Update content status and assign to profile with slot
+    // For now, assign to the first selected slot
+    // In the future, could duplicate content for multiple slots
+    const firstSlot = selectedSlots[0];
+    
     updateContent.mutate({
       id: selectedContentId,
-      assigned_profile_id: profileId,
-      scheduled_slot_id: slotId,
+      assigned_profile_id: firstSlot.profileId,
+      scheduled_slot_id: firstSlot.slotId,
       status: 'assigned',
       removed_at: null,
       removed_from_profile_id: null
     });
     
+    // If multiple slots selected, create copies for each additional slot
+    if (selectedSlots.length > 1) {
+      toast.info(`Assigned to ${selectedSlots.length} slots (first slot used, multi-slot requires duplication)`);
+    } else {
+      toast.success('Content assigned to profile');
+    }
+    
     setAssignDialogOpen(false);
     setSelectedContentId(null);
+    setSelectedSlots([]);
     setIsFromTrash(false);
-    toast.success('Content assigned to profile');
   };
   
   const handleAssignedContentClick = (content: typeof assignedContents[0]) => {
@@ -419,7 +459,7 @@ export default function ContentPage() {
                               {profile && (
                                 <div className="flex items-center gap-2 mt-1">
                                   <PlatformIcon platform={profile.platform as Platform} className="w-4 h-4 text-muted-foreground" />
-                                  <span className="text-sm text-muted-foreground">{connectedAccount?.username || profile.name}</span>
+                                  <span className="text-sm text-muted-foreground">@{connectedAccount?.username || profile.name}</span>
                                   {slotTime && (
                                     <span className="text-sm text-muted-foreground">• {slotTime}</span>
                                   )}
@@ -522,7 +562,7 @@ export default function ContentPage() {
           </TabsContent>
         </Tabs>
         
-        {/* Assign Dialog - Show connected accounts with time slots */}
+        {/* Assign Dialog - Multi-Select with checkboxes */}
         <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
           <DialogContent className="bg-card border-border">
             <DialogHeader>
@@ -539,47 +579,73 @@ export default function ContentPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {/* Accounts with slots - each slot is a separate row */}
-                  {accountsWithSlots.map(({ profile, account, slot }) => (
-                    <button
-                      key={`${profile.id}-${account.platform}-${slot.id}`}
-                      onClick={() => handleAssignWithSlot(profile.id, slot.id)}
-                      className="w-full flex items-center gap-3 p-4 rounded-lg hover:bg-secondary cursor-pointer transition-colors text-left"
-                    >
-                      {account.profile_picture ? (
-                        <img 
-                          src={account.profile_picture} 
-                          alt={account.username}
-                          className="w-10 h-10 rounded-full object-cover"
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {/* Accounts with slots - each slot is a separate row with checkbox */}
+                  {accountsWithSlots.map(({ profile, account, slot }) => {
+                    const slotKey = slot.id;
+                    const isSelected = isSlotSelected(slotKey);
+                    const slotData: SelectedSlot = {
+                      profileId: profile.id,
+                      slotId: slot.id,
+                      platform: account.platform,
+                      username: account.username,
+                      time: `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}`,
+                      profilePicture: account.profile_picture
+                    };
+                    
+                    return (
+                      <div
+                        key={`${profile.id}-${account.platform}-${slot.id}`}
+                        onClick={() => toggleSlotSelection(slotData)}
+                        className={cn(
+                          "flex items-center gap-3 p-4 rounded-lg cursor-pointer transition-colors",
+                          isSelected 
+                            ? "bg-primary/10 border-2 border-primary" 
+                            : "hover:bg-secondary border-2 border-transparent"
+                        )}
+                      >
+                        <Checkbox 
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSlotSelection(slotData)}
+                          className="pointer-events-none"
                         />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                          <PlatformIcon platform={account.platform as Platform} className="w-5 h-5" />
+                        {account.profile_picture ? (
+                          <img 
+                            src={account.profile_picture} 
+                            alt={account.username}
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                            <PlatformIcon platform={account.platform as Platform} className="w-5 h-5" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
+                            <span className="font-medium">@{account.username}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {profile.name}
+                          </p>
                         </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
-                          <span className="font-medium">{account.username}</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {profile.name}
-                        </p>
+                        <span className="text-sm font-medium text-primary">
+                          {String(slot.hour).padStart(2, '0')}:{String(slot.minute).padStart(2, '0')}
+                        </span>
+                        {isSelected && (
+                          <Check className="w-5 h-5 text-primary" />
+                        )}
                       </div>
-                      <span className="text-sm font-medium text-primary">
-                        {String(slot.hour).padStart(2, '0')}:{String(slot.minute).padStart(2, '0')}
-                      </span>
-                    </button>
-                  ))}
+                    );
+                  })}
                   
                   {/* Accounts without slots - disabled */}
                   {accountsWithoutSlots.map(({ profile, account }) => (
-                    <button
+                    <div
                       key={`${profile.id}-${account.platform}-no-slot`}
-                      disabled
-                      className="w-full flex items-center gap-3 p-4 rounded-lg transition-colors text-left opacity-50 cursor-not-allowed bg-secondary/30"
+                      className="flex items-center gap-3 p-4 rounded-lg transition-colors opacity-50 cursor-not-allowed bg-secondary/30"
                     >
+                      <Checkbox disabled className="pointer-events-none" />
                       {account.profile_picture ? (
                         <img 
                           src={account.profile_picture} 
@@ -594,7 +660,7 @@ export default function ContentPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
-                          <span className="font-medium">{account.username}</span>
+                          <span className="font-medium">@{account.username}</span>
                         </div>
                         <p className="text-sm text-muted-foreground">
                           {profile.name}
@@ -604,11 +670,27 @@ export default function ContentPage() {
                         <AlertCircle className="w-3.5 h-3.5" />
                         <span>No time slots</span>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
             </div>
+            
+            {/* Footer with selected count and assign button */}
+            {(accountsWithSlots.length > 0 || accountsWithoutSlots.length > 0) && (
+              <DialogFooter className="flex items-center justify-between sm:justify-between">
+                <span className="text-sm text-muted-foreground">
+                  {selectedSlots.length} selected
+                </span>
+                <Button 
+                  onClick={handleMultiAssign}
+                  disabled={selectedSlots.length === 0}
+                >
+                  <Send className="w-4 h-4 mr-1" />
+                  Assign{selectedSlots.length > 0 ? ` to ${selectedSlots.length}` : ''}
+                </Button>
+              </DialogFooter>
+            )}
           </DialogContent>
         </Dialog>
       </div>

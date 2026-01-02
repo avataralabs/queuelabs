@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
       if (accountData && typeof accountData === 'object' && Object.keys(accountData).length > 0) {
         connectedAccounts.push({
           platform,
-          username: accountData.username || accountData.name || '',
+          username: accountData.handle || accountData.display_name || accountData.name || '',
           profile_picture: accountData.profile_picture || accountData.avatar || '',
           connected_at: new Date().toISOString()
         });

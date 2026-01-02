@@ -1,6 +1,6 @@
 import { useState, DragEvent } from 'react';
-import { useAppStore } from '@/stores/appStore';
-import { Content, ScheduledContent, ScheduleSlot } from '@/types';
+import { useScheduleSlots } from '@/hooks/useScheduleSlots';
+import { useContents } from '@/hooks/useContents';
 import { Button } from '@/components/ui/button';
 import { 
   Dialog, 
@@ -22,45 +22,42 @@ interface TimelineGraphProps {
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps) {
-  const { 
-    scheduleSlots, 
-    scheduledContents, 
-    contents, 
-    getPendingContents,
-    scheduleContent,
-    moveScheduledContent,
-    swapScheduledContents,
-    removeFromSchedule,
-    unscheduleContent 
-  } = useAppStore();
+  // Use Supabase hooks instead of local store
+  const { slots: allSlots } = useScheduleSlots();
+  const { contents, updateContent } = useContents();
   
   const [selectedSlot, setSelectedSlot] = useState<{
     date: Date;
     hour: number;
-    scheduledContent?: ScheduledContent;
+    content?: typeof contents[0];
   } | null>(null);
   
-  const [draggedItem, setDraggedItem] = useState<ScheduledContent | null>(null);
+  const [draggedItem, setDraggedItem] = useState<typeof contents[0] | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<{ date: Date; hour: number } | null>(null);
   
   // Filter slots by profileId AND platform
-  const profileSlots = scheduleSlots.filter(s => 
-    s.profileId === profileId && 
-    (s as any).platform === platform && 
-    s.isActive
+  const profileSlots = allSlots.filter(s => 
+    s.profile_id === profileId && 
+    s.platform === platform && 
+    s.is_active
   );
-  const pendingContents = getPendingContents();
   
-  const getScheduledContentForSlot = (date: Date, hour: number): ScheduledContent | undefined => {
-    const dateStr = startOfDay(date).toISOString();
-    return scheduledContents.find(sc => 
-      sc.profileId === profileId &&
-      startOfDay(new Date(sc.scheduledDate)).toISOString() === dateStr &&
-      sc.hour === hour
-    );
+  // Get assigned/scheduled contents for this profile
+  const assignedContents = contents.filter(c => 
+    c.assigned_profile_id === profileId &&
+    c.scheduled_slot_id &&
+    (c.status === 'assigned' || c.status === 'scheduled')
+  );
+  
+  // Get pending contents for scheduling
+  const pendingContents = contents.filter(c => c.status === 'pending');
+  
+  // Get content assigned to a specific slot
+  const getContentForSlot = (slotId: string): typeof contents[0] | undefined => {
+    return assignedContents.find(c => c.scheduled_slot_id === slotId);
   };
   
-  const getSlotForHour = (hour: number): ScheduleSlot | undefined => {
+  const getSlotForHour = (hour: number): typeof profileSlots[0] | undefined => {
     return profileSlots.find(s => s.hour === hour);
   };
   
@@ -68,18 +65,20 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
     const slot = profileSlots.find(s => s.hour === hour);
     if (!slot) return false;
     if (slot.type === 'daily') return true;
-    if (slot.type === 'weekly' && slot.weekDays) {
-      return slot.weekDays.includes(date.getDay());
+    if (slot.type === 'weekly' && slot.week_days) {
+      return slot.week_days.includes(date.getDay());
     }
     return false;
   };
   
-  const getContentById = (id: string): Content | undefined => {
-    return contents.find(c => c.id === id);
+  const getContentForHour = (date: Date, hour: number): typeof contents[0] | undefined => {
+    const slot = getSlotForHour(hour);
+    if (!slot) return undefined;
+    return getContentForSlot(slot.id);
   };
   
   const handleSlotClick = (date: Date, hour: number) => {
-    const scheduled = getScheduledContentForSlot(date, hour);
+    const content = getContentForHour(date, hour);
     const hasSlot = hasSlotAtHour(hour, date);
     
     // Don't allow interaction with past slots
@@ -87,8 +86,8 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
     slotTime.setHours(hour, 0, 0, 0);
     if (isBefore(slotTime, new Date())) return;
     
-    if (scheduled) {
-      setSelectedSlot({ date, hour, scheduledContent: scheduled });
+    if (content) {
+      setSelectedSlot({ date, hour, content });
     } else if (hasSlot && pendingContents.length > 0) {
       setSelectedSlot({ date, hour });
     }
@@ -100,36 +99,46 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
     const slot = getSlotForHour(selectedSlot.hour);
     if (!slot) return;
     
-    scheduleContent(
-      contentId, 
-      profileId, 
-      slot.id, 
-      selectedSlot.date, 
-      selectedSlot.hour, 
-      slot.minute || 0
-    );
+    updateContent.mutate({
+      id: contentId,
+      assigned_profile_id: profileId,
+      scheduled_slot_id: slot.id,
+      status: 'assigned',
+    });
     
     setSelectedSlot(null);
     toast.success('Content scheduled');
   };
   
-  const handleRemoveFromSchedule = (scId: string) => {
-    removeFromSchedule(scId);
+  const handleRemoveFromSchedule = (contentId: string) => {
+    updateContent.mutate({
+      id: contentId,
+      status: 'removed',
+      removed_at: new Date().toISOString(),
+      removed_from_profile_id: profileId,
+      scheduled_slot_id: null,
+      assigned_profile_id: null,
+    });
     setSelectedSlot(null);
     toast.success('Content removed from schedule (moved to trash)');
   };
   
-  const handleUnschedule = (scId: string) => {
-    unscheduleContent(scId);
+  const handleUnschedule = (contentId: string) => {
+    updateContent.mutate({
+      id: contentId,
+      status: 'pending',
+      scheduled_slot_id: null,
+      assigned_profile_id: null,
+    });
     setSelectedSlot(null);
     toast.success('Content unscheduled (back to pending)');
   };
   
   // Drag and Drop handlers
-  const handleDragStart = (e: DragEvent, scheduled: ScheduledContent) => {
-    setDraggedItem(scheduled);
+  const handleDragStart = (e: DragEvent, content: typeof contents[0]) => {
+    setDraggedItem(content);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', scheduled.id);
+    e.dataTransfer.setData('text/plain', content.id);
   };
   
   const handleDragEnd = () => {
@@ -146,7 +155,7 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
     if (isBefore(slotTime, new Date())) return;
     
     const hasSlot = hasSlotAtHour(hour, date);
-    if (!hasSlot && !getScheduledContentForSlot(date, hour)) return;
+    if (!hasSlot) return;
     
     e.dataTransfer.dropEffect = 'move';
     setDragOverSlot({ date, hour });
@@ -166,21 +175,34 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
     slotTime.setHours(hour, 0, 0, 0);
     if (isBefore(slotTime, new Date())) return;
     
-    const targetScheduled = getScheduledContentForSlot(date, hour);
+    const targetContent = getContentForHour(date, hour);
+    const targetSlot = getSlotForHour(hour);
     
-    if (targetScheduled) {
+    if (!targetSlot) return;
+    
+    if (targetContent) {
       // Swap with existing content
-      if (targetScheduled.id !== draggedItem.id) {
-        swapScheduledContents(draggedItem.id, targetScheduled.id);
+      if (targetContent.id !== draggedItem.id) {
+        const draggedSlotId = draggedItem.scheduled_slot_id;
+        // Update target content to dragged item's slot
+        updateContent.mutate({
+          id: targetContent.id,
+          scheduled_slot_id: draggedSlotId,
+        });
+        // Update dragged item to target slot
+        updateContent.mutate({
+          id: draggedItem.id,
+          scheduled_slot_id: targetSlot.id,
+        });
         toast.success('Content swapped');
       }
     } else {
       // Move to empty slot
-      const slot = getSlotForHour(hour);
-      if (slot) {
-        moveScheduledContent(draggedItem.id, date, hour, slot.minute || 0);
-        toast.success('Content moved');
-      }
+      updateContent.mutate({
+        id: draggedItem.id,
+        scheduled_slot_id: targetSlot.id,
+      });
+      toast.success('Content moved');
     }
     
     setDraggedItem(null);
@@ -238,14 +260,13 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
               
               {/* Day Slots */}
               {dates.map(date => {
-                const scheduled = getScheduledContentForSlot(date, hour);
+                const content = getContentForHour(date, hour);
                 const hasSlot = hasSlotAtHour(hour, date);
-                const content = scheduled ? getContentById(scheduled.contentId) : undefined;
                 const slotTime = new Date(date);
                 slotTime.setHours(hour, 0, 0, 0);
                 const isPast = isBefore(slotTime, new Date());
                 const isDragOver = dragOverSlot?.date.toISOString() === date.toISOString() && dragOverSlot?.hour === hour;
-                const isDragging = draggedItem?.id === scheduled?.id;
+                const isDragging = draggedItem?.id === content?.id;
                 
                 return (
                   <div
@@ -256,20 +277,20 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
                     onDrop={(e) => handleDrop(e, date, hour)}
                     className={cn(
                       "min-h-[50px] border-l border-border/50 p-1 transition-all duration-200",
-                      hasSlot && !scheduled && !isPast && "bg-timeline-slot cursor-pointer hover:bg-timeline-slot-hover",
-                      scheduled && "bg-timeline-slot-filled",
+                      hasSlot && !content && !isPast && "bg-timeline-slot cursor-pointer hover:bg-timeline-slot-hover",
+                      content && "bg-timeline-slot-filled",
                       isPast && "opacity-50",
                       isToday(date) && "bg-primary/5",
                       isDragOver && !isDragging && "ring-2 ring-primary bg-primary/20",
-                      isDragOver && scheduled && !isDragging && "ring-2 ring-amber-400 bg-amber-100"
+                      isDragOver && content && !isDragging && "ring-2 ring-amber-400 bg-amber-100"
                     )}
                   >
-                    {scheduled && content && (
+                    {content && (
                       <div 
                         draggable={!isPast}
                         onDragStart={(e) => {
                           e.stopPropagation();
-                          handleDragStart(e, scheduled);
+                          handleDragStart(e, content);
                         }}
                         onDragEnd={(e) => {
                           e.stopPropagation();
@@ -285,19 +306,19 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
                       >
                         <div className="flex items-center gap-1">
                           <GripVertical className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                          <p className="font-medium truncate flex-1" title={content.fileName}>
-                            {content.fileName.length > 12 
-                              ? `${content.fileName.slice(0, 12)}...` 
-                              : content.fileName
+                          <p className="font-medium truncate flex-1" title={content.file_name}>
+                            {content.file_name.length > 12 
+                              ? `${content.file_name.slice(0, 12)}...` 
+                              : content.file_name
                             }
                           </p>
                         </div>
                         <p className="text-muted-foreground mt-0.5 ml-4">
-                          {format(new Date(scheduled.scheduledDate), 'HH:mm')}
+                          {hour.toString().padStart(2, '0')}:00
                         </p>
                       </div>
                     )}
-                    {hasSlot && !scheduled && !isPast && (
+                    {hasSlot && !content && !isPast && (
                       <div className="h-full flex items-center justify-center text-muted-foreground opacity-0 hover:opacity-100 transition-opacity">
                         <span className="text-xs">+ Add</span>
                       </div>
@@ -314,7 +335,7 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
           <DialogContent className="glass border-border">
             <DialogHeader>
               <DialogTitle>
-                {selectedSlot?.scheduledContent ? 'Manage Scheduled Content' : 'Add Content'}
+                {selectedSlot?.content ? 'Manage Scheduled Content' : 'Add Content'}
               </DialogTitle>
             </DialogHeader>
             
@@ -327,26 +348,21 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
                   <span>{selectedSlot.hour.toString().padStart(2, '0')}:00</span>
                 </div>
                 
-                {selectedSlot.scheduledContent ? (
+                {selectedSlot.content ? (
                   <div className="space-y-4">
-                    {(() => {
-                      const content = getContentById(selectedSlot.scheduledContent!.contentId);
-                      return content ? (
-                        <div className="p-4 rounded-lg bg-secondary/30">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <FileVideo className="w-6 h-6 text-primary" />
-                            </div>
-                            <div>
-                              <p className="font-medium">{content.fileName}</p>
-                              <p className="text-sm text-muted-foreground truncate max-w-[250px]">
-                                {content.caption || 'No caption'}
-                              </p>
-                            </div>
-                          </div>
+                    <div className="p-4 rounded-lg bg-secondary/30">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <FileVideo className="w-6 h-6 text-primary" />
                         </div>
-                      ) : null;
-                    })()}
+                        <div>
+                          <p className="font-medium">{selectedSlot.content.file_name}</p>
+                          <p className="text-sm text-muted-foreground truncate max-w-[250px]">
+                            {selectedSlot.content.caption || 'No caption'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                     
                     <p className="text-xs text-muted-foreground">
                       💡 Tip: Drag content to move or swap with another
@@ -355,14 +371,14 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
                     <div className="grid grid-cols-2 gap-2">
                       <Button 
                         variant="outline"
-                        onClick={() => handleUnschedule(selectedSlot.scheduledContent!.id)}
+                        onClick={() => handleUnschedule(selectedSlot.content!.id)}
                       >
                         <RotateCcw className="w-4 h-4 mr-1" />
                         Unschedule
                       </Button>
                       <Button 
                         variant="destructive"
-                        onClick={() => handleRemoveFromSchedule(selectedSlot.scheduledContent!.id)}
+                        onClick={() => handleRemoveFromSchedule(selectedSlot.content!.id)}
                       >
                         <Trash2 className="w-4 h-4 mr-1" />
                         Remove
@@ -391,7 +407,7 @@ export function TimelineGraph({ profileId, platform, dates }: TimelineGraphProps
                         >
                           <FileVideo className="w-5 h-5 text-primary" />
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium truncate">{content.fileName}</p>
+                            <p className="font-medium truncate">{content.file_name}</p>
                             <p className="text-xs text-muted-foreground truncate">
                               {content.caption || 'No caption'}
                             </p>

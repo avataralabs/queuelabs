@@ -9,8 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useProfiles, Platform, ConnectedAccount } from '@/hooks/useProfiles';
 import { useContents } from '@/hooks/useContents';
 import { useScheduleSlots } from '@/hooks/useScheduleSlots';
-import { useAppStore } from '@/stores/appStore';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 import { 
   Dialog, 
@@ -18,7 +16,7 @@ import {
   DialogHeader, 
   DialogTitle 
 } from '@/components/ui/dialog';
-import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, AlertCircle, Database } from 'lucide-react';
+import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -26,14 +24,10 @@ import { toast } from 'sonner';
 export default function ContentPage() {
   const navigate = useNavigate();
   
-  // Use Supabase hooks instead of local storage
+  // Use Supabase hooks for database
   const { profiles, isLoading: profilesLoading } = useProfiles();
   const { contents, isLoading: contentsLoading, addContent, updateContent, deleteContent } = useContents();
   const { slots, isLoading: slotsLoading } = useScheduleSlots();
-  
-  // Check for local storage data for migration
-  const localContents = useAppStore(state => state.contents);
-  const clearLocalContents = useAppStore(state => () => state.contents = []);
   
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null);
@@ -42,10 +36,6 @@ export default function ContentPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState('pending');
-  const [isMigrating, setIsMigrating] = useState(false);
-  
-  // Check if migration is needed
-  const needsMigration = localContents.length > 0 && !contentsLoading;
   
   const pendingContents = contents.filter(c => c.status === 'pending');
   const assignedContents = contents.filter(c => c.status === 'assigned' || c.status === 'scheduled');
@@ -171,38 +161,6 @@ export default function ContentPage() {
   const isLoading = profilesLoading || contentsLoading || slotsLoading;
   const connectedAccounts = getAllConnectedAccounts();
   
-  // Migration handler
-  const handleMigrateData = async () => {
-    setIsMigrating(true);
-    try {
-      for (const content of localContents) {
-        await addContent.mutateAsync({
-          file_name: content.fileName,
-          caption: content.caption || null,
-          file_size: content.fileSize || 0,
-          file_url: null,
-          assigned_profile_id: null,
-          scheduled_at: null,
-          scheduled_slot_id: null,
-          status: 'pending',
-          removed_at: null,
-          removed_from_profile_id: null
-        });
-      }
-      
-      // Clear local storage after successful migration
-      localStorage.removeItem('queuelabs-storage');
-      window.location.reload(); // Reload to clear Zustand state
-      
-      toast.success(`${localContents.length} content items migrated successfully!`);
-    } catch (error) {
-      toast.error('Migration failed. Please try again.');
-      console.error('Migration error:', error);
-    } finally {
-      setIsMigrating(false);
-    }
-  };
-  
   return (
     <MainLayout>
       <div className="space-y-6 animate-fade-in">
@@ -213,25 +171,6 @@ export default function ContentPage() {
             Upload and manage your video content
           </p>
         </div>
-        
-        {/* Migration Alert */}
-        {needsMigration && (
-          <Alert className="border-primary/50 bg-primary/5">
-            <Database className="h-4 w-4" />
-            <AlertTitle>Data Migration Required</AlertTitle>
-            <AlertDescription className="flex items-center justify-between">
-              <span>Found {localContents.length} content items in local storage. Migrate them to the database for persistence.</span>
-              <Button 
-                onClick={handleMigrateData} 
-                disabled={isMigrating}
-                size="sm"
-                className="ml-4"
-              >
-                {isMigrating ? 'Migrating...' : 'Migrate Data'}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
         
         {/* Upload Section - Main/Large */}
         <div className="glass rounded-xl p-8">

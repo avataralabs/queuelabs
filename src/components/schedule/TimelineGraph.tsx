@@ -368,7 +368,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
         
         {/* Slot Action Dialog */}
         <Dialog open={!!selectedSlot} onOpenChange={() => setSelectedSlot(null)}>
-          <DialogContent className="glass border-border max-w-md overflow-hidden">
+          <DialogContent className="glass border-border w-full max-w-sm sm:max-w-[400px]">
             <DialogHeader>
               <DialogTitle>
                 {selectedSlot?.contents && selectedSlot.contents.length > 0 
@@ -391,12 +391,12 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                     <ScrollArea className="max-h-[300px]">
                       <div className="space-y-3">
                         {selectedSlot.contents.map(content => (
-                          <div key={content.id} className="p-4 rounded-lg bg-secondary/30 overflow-hidden">
-                            <div className="flex items-center gap-3 overflow-hidden">
+                          <div key={content.id} className="p-4 rounded-lg bg-secondary/30">
+                            <div className="flex items-center gap-3 w-full">
                               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                                 <FileVideo className="w-6 h-6 text-primary" />
                               </div>
-                              <div className="min-w-0 flex-1 overflow-hidden">
+                              <div className="min-w-0 flex-1">
                                 <p className="font-medium truncate">{content.file_name}</p>
                                 <p className="text-sm text-muted-foreground truncate">
                                   {content.caption || 'No caption'}
@@ -404,10 +404,11 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                               </div>
                             </div>
                             
-                            <div className="grid grid-cols-2 gap-2 mt-3">
+                            <div className="flex gap-2 mt-3">
                               <Button 
                                 variant="outline"
                                 size="sm"
+                                className="flex-1"
                                 onClick={() => handleUnschedule(content.id)}
                               >
                                 <RotateCcw className="w-3 h-3 mr-1" />
@@ -416,6 +417,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                               <Button 
                                 variant="destructive"
                                 size="sm"
+                                className="flex-1"
                                 onClick={() => handleRemoveFromSchedule(content.id)}
                               >
                                 <Trash2 className="w-3 h-3 mr-1" />

@@ -202,33 +202,33 @@ export default function ContentPage() {
           
           {selectedFile && videoPreviewUrl ? (
             <div className="space-y-6">
-              {/* Video Preview - 16:9 aspect ratio container */}
-              <div className="relative w-full max-w-2xl mx-auto" style={{ aspectRatio: '16/9' }}>
+              {/* Video Preview - 16:9 aspect ratio container - clickable */}
+              <div 
+                className="relative w-full max-w-2xl mx-auto cursor-pointer group" 
+                style={{ aspectRatio: '16/9' }}
+                onClick={handleUploadClick}
+              >
                 <div className="absolute inset-0 bg-black rounded-xl overflow-hidden">
                   <video
                     src={videoPreviewUrl}
-                    className="w-full h-full object-contain"
-                    controls
+                    className="w-full h-full object-contain pointer-events-none"
                     muted
                   />
+                </div>
+                
+                {/* Hover overlay */}
+                <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white">
+                  <Upload className="w-12 h-12 mb-2" />
+                  <p className="font-medium">Click to change video</p>
                 </div>
               </div>
               
               {/* File info */}
-              <div className="text-center space-y-2">
+              <div className="text-center space-y-1">
                 <p className="font-medium">{selectedFile.name}</p>
                 <p className="text-sm text-muted-foreground">
                   {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                 </p>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={handleUploadClick}
-                  className="text-primary hover:text-primary/80"
-                >
-                  <Upload className="w-4 h-4 mr-1" />
-                  Change Video
-                </Button>
               </div>
               
               <div>

@@ -134,6 +134,11 @@ export default function ContentPage() {
     setVideoPreviewUrl(null);
     setSelectedFile(null);
     setNewContent({ fileName: '', caption: '' });
+    
+    // Reset file input so the same file can be uploaded again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleUpload = () => {
@@ -379,7 +384,11 @@ export default function ContentPage() {
               </div>
               
               <div className="flex gap-3 justify-center">
-                <Button onClick={handleUpload} variant="default">
+                <Button 
+                  onClick={handleUpload} 
+                  variant="default"
+                  disabled={!newContent.caption.trim()}
+                >
                   <Upload className="w-4 h-4" />
                   Add to Queue
                 </Button>

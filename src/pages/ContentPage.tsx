@@ -44,31 +44,52 @@ export default function ContentPage() {
   
   const getProfileById = (id?: string | null) => profiles.find(p => p.id === id);
   
-  // Check if a profile+platform combination has active slots
-  const getProfilePlatformHasSlots = (profileId: string, platform: string) => {
-    return slots.some(s => s.profile_id === profileId && s.platform === platform && s.is_active);
+  // Get all active slots for a profile+platform combination
+  const getSlotsByProfilePlatform = (profileId: string, platform: string) => {
+    return slots.filter(s => 
+      s.profile_id === profileId && 
+      s.platform === platform && 
+      s.is_active
+    );
   };
   
-  // Get all connected accounts across all profiles with their parent profile info
-  const getAllConnectedAccounts = () => {
-    const accounts: Array<{
+  // Get all connected accounts across all profiles with their parent profile info and slots
+  const getAllConnectedAccountsWithSlots = () => {
+    const accountsWithSlots: Array<{
       profile: typeof profiles[0];
       account: ConnectedAccount;
-      hasSlots: boolean;
+      slot: typeof slots[0];
+    }> = [];
+    
+    const accountsWithoutSlots: Array<{
+      profile: typeof profiles[0];
+      account: ConnectedAccount;
     }> = [];
     
     profiles.forEach(profile => {
       const connectedAccounts = profile.connected_accounts as ConnectedAccount[] || [];
       connectedAccounts.forEach(account => {
-        accounts.push({
-          profile,
-          account,
-          hasSlots: getProfilePlatformHasSlots(profile.id, account.platform)
-        });
+        const accountSlots = getSlotsByProfilePlatform(profile.id, account.platform);
+        
+        if (accountSlots.length > 0) {
+          // Add each slot as a separate entry
+          accountSlots.forEach(slot => {
+            accountsWithSlots.push({
+              profile,
+              account,
+              slot
+            });
+          });
+        } else {
+          accountsWithoutSlots.push({
+            profile,
+            account
+          });
+        }
       });
     });
     
-    return accounts;
+    return { accountsWithSlots, accountsWithoutSlots };
   };
   
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,19 +148,14 @@ export default function ContentPage() {
     setAssignDialogOpen(true);
   };
   
-  const handleAssign = (profileId: string, platform: string) => {
+  const handleAssignWithSlot = (profileId: string, slotId: string) => {
     if (!selectedContentId) return;
     
-    const hasSlots = getProfilePlatformHasSlots(profileId, platform);
-    if (!hasSlots) {
-      toast.error('This account has no time slots. Please create time slots first.');
-      return;
-    }
-    
-    // Update content status and assign to profile
+    // Update content status and assign to profile with slot
     updateContent.mutate({
       id: selectedContentId,
       assigned_profile_id: profileId,
+      scheduled_slot_id: slotId,
       status: 'assigned',
       removed_at: null,
       removed_from_profile_id: null
@@ -177,7 +193,7 @@ export default function ContentPage() {
   };
 
   const isLoading = profilesLoading || contentsLoading || slotsLoading;
-  const connectedAccounts = getAllConnectedAccounts();
+  const { accountsWithSlots, accountsWithoutSlots } = getAllConnectedAccountsWithSlots();
   
   return (
     <MainLayout>
@@ -221,14 +237,6 @@ export default function ContentPage() {
                   <Upload className="w-12 h-12 mb-2" />
                   <p className="font-medium">Click to change video</p>
                 </div>
-              </div>
-              
-              {/* File info */}
-              <div className="text-center space-y-1">
-                <p className="font-medium">{selectedFile.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
-                </p>
               </div>
               
               <div>
@@ -312,7 +320,9 @@ export default function ContentPage() {
                     >
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <FileVideo className="w-5 h-5 text-primary flex-shrink-0" />
+                          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                            <FileVideo className="w-5 h-5 text-primary" />
+                          </div>
                           <div className="min-w-0 flex-1">
                             <p className="font-medium truncate" title={content.file_name}>
                               {content.file_name}
@@ -369,6 +379,16 @@ export default function ContentPage() {
                 <div className="space-y-2">
                   {assignedContents.map(content => {
                     const profile = getProfileById(content.assigned_profile_id);
+                    const contentSlot = slots.find(s => s.id === content.scheduled_slot_id);
+                    const slotTime = contentSlot 
+                      ? `${String(contentSlot.hour).padStart(2, '0')}:${String(contentSlot.minute).padStart(2, '0')}`
+                      : null;
+                    
+                    // Get connected account for profile picture
+                    const connectedAccount = profile?.connected_accounts?.find(
+                      (acc: ConnectedAccount) => acc.platform === profile.platform
+                    ) as ConnectedAccount | undefined;
+                    
                     return (
                       <div 
                         key={content.id}
@@ -377,19 +397,31 @@ export default function ContentPage() {
                       >
                         <div className="flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <FileVideo className="w-5 h-5 text-primary flex-shrink-0" />
+                            {connectedAccount?.profile_picture ? (
+                              <img 
+                                src={connectedAccount.profile_picture} 
+                                alt={connectedAccount.username}
+                                className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                                {profile ? (
+                                  <PlatformIcon platform={profile.platform as Platform} className="w-5 h-5" />
+                                ) : (
+                                  <FileVideo className="w-5 h-5 text-primary" />
+                                )}
+                              </div>
+                            )}
                             <div className="min-w-0 flex-1">
                               <p className="font-medium truncate" title={content.file_name}>
                                 {content.file_name}
                               </p>
                               {profile && (
                                 <div className="flex items-center gap-2 mt-1">
-                                  <PlatformBadge platform={profile.platform as Platform} size="sm" showLabel={false} />
-                                  <span className="text-sm text-muted-foreground">{profile.name}</span>
-                                  {content.scheduled_at && (
-                                    <span className="text-sm text-primary">
-                                      • {format(new Date(content.scheduled_at), 'MMM d, HH:mm')}
-                                    </span>
+                                  <PlatformIcon platform={profile.platform as Platform} className="w-4 h-4 text-muted-foreground" />
+                                  <span className="text-sm text-muted-foreground">{connectedAccount?.username || profile.name}</span>
+                                  {slotTime && (
+                                    <span className="text-sm text-muted-foreground">• {slotTime}</span>
                                   )}
                                 </div>
                               )}
@@ -490,14 +522,14 @@ export default function ContentPage() {
           </TabsContent>
         </Tabs>
         
-        {/* Assign Dialog - Show connected accounts per platform */}
+        {/* Assign Dialog - Show connected accounts with time slots */}
         <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
           <DialogContent className="bg-card border-border">
             <DialogHeader>
               <DialogTitle>Assign to Profile</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-4">
-              {connectedAccounts.length === 0 ? (
+              {accountsWithSlots.length === 0 && accountsWithoutSlots.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground mb-4">
                     No connected accounts yet. Connect your social media accounts first.
@@ -508,17 +540,12 @@ export default function ContentPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {connectedAccounts.map(({ profile, account, hasSlots }) => (
+                  {/* Accounts with slots - each slot is a separate row */}
+                  {accountsWithSlots.map(({ profile, account, slot }) => (
                     <button
-                      key={`${profile.id}-${account.platform}`}
-                      onClick={() => handleAssign(profile.id, account.platform)}
-                      disabled={!hasSlots}
-                      className={cn(
-                        "w-full flex items-center gap-3 p-4 rounded-lg transition-colors text-left",
-                        hasSlots 
-                          ? "hover:bg-secondary cursor-pointer" 
-                          : "opacity-50 cursor-not-allowed bg-secondary/30"
-                      )}
+                      key={`${profile.id}-${account.platform}-${slot.id}`}
+                      onClick={() => handleAssignWithSlot(profile.id, slot.id)}
+                      className="w-full flex items-center gap-3 p-4 rounded-lg hover:bg-secondary cursor-pointer transition-colors text-left"
                     >
                       {account.profile_picture ? (
                         <img 
@@ -540,12 +567,43 @@ export default function ContentPage() {
                           {profile.name}
                         </p>
                       </div>
-                      {!hasSlots && (
-                        <div className="flex items-center gap-1 text-warning text-xs">
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          <span>No time slots</span>
+                      <span className="text-sm font-medium text-primary">
+                        {String(slot.hour).padStart(2, '0')}:{String(slot.minute).padStart(2, '0')}
+                      </span>
+                    </button>
+                  ))}
+                  
+                  {/* Accounts without slots - disabled */}
+                  {accountsWithoutSlots.map(({ profile, account }) => (
+                    <button
+                      key={`${profile.id}-${account.platform}-no-slot`}
+                      disabled
+                      className="w-full flex items-center gap-3 p-4 rounded-lg transition-colors text-left opacity-50 cursor-not-allowed bg-secondary/30"
+                    >
+                      {account.profile_picture ? (
+                        <img 
+                          src={account.profile_picture} 
+                          alt={account.username}
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                          <PlatformIcon platform={account.platform as Platform} className="w-5 h-5" />
                         </div>
                       )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
+                          <span className="font-medium">{account.username}</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {profile.name}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 text-warning text-xs">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        <span>No time slots</span>
+                      </div>
                     </button>
                   ))}
                 </div>

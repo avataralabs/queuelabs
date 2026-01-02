@@ -215,11 +215,20 @@ export default function ContentPage() {
               </div>
               
               {/* File info */}
-              <div className="text-center space-y-1">
+              <div className="text-center space-y-2">
                 <p className="font-medium">{selectedFile.name}</p>
                 <p className="text-sm text-muted-foreground">
                   {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                 </p>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={handleUploadClick}
+                  className="text-primary hover:text-primary/80"
+                >
+                  <Upload className="w-4 h-4 mr-1" />
+                  Change Video
+                </Button>
               </div>
               
               <div>

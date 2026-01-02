@@ -34,6 +34,7 @@ export default function ContentPage() {
   const [isFromTrash, setIsFromTrash] = useState(false);
   const [newContent, setNewContent] = useState({ fileName: '', caption: '' });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState('pending');
   
@@ -73,13 +74,31 @@ export default function ContentPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Cleanup previous preview URL
+      if (videoPreviewUrl) {
+        URL.revokeObjectURL(videoPreviewUrl);
+      }
+      
       setSelectedFile(file);
       setNewContent(prev => ({ ...prev, fileName: file.name }));
+      
+      // Generate preview URL for video
+      const url = URL.createObjectURL(file);
+      setVideoPreviewUrl(url);
     }
   };
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const clearPreview = () => {
+    if (videoPreviewUrl) {
+      URL.revokeObjectURL(videoPreviewUrl);
+    }
+    setVideoPreviewUrl(null);
+    setSelectedFile(null);
+    setNewContent({ fileName: '', caption: '' });
   };
 
   const handleUpload = () => {
@@ -98,8 +117,7 @@ export default function ContentPage() {
       removed_from_profile_id: null
     });
     
-    setNewContent({ fileName: '', caption: '' });
-    setSelectedFile(null);
+    clearPreview();
     toast.success('Content added to queue');
   };
   
@@ -182,24 +200,28 @@ export default function ContentPage() {
             className="hidden"
           />
           
-          <div 
-            onClick={handleUploadClick}
-            className="border-2 border-dashed border-border rounded-xl p-12 text-center hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer mb-6"
-          >
-            <CloudUpload className="w-16 h-16 mx-auto mb-4 text-primary" />
-            <h3 className="text-lg font-semibold mb-2">
-              {selectedFile ? selectedFile.name : 'Click to upload video'}
-            </h3>
-            <p className="text-muted-foreground text-sm">
-              {selectedFile 
-                ? `${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB`
-                : 'or drag & drop your video file here'
-              }
-            </p>
-          </div>
-          
-          {selectedFile && (
-            <div className="space-y-4">
+          {selectedFile && videoPreviewUrl ? (
+            <div className="space-y-6">
+              {/* Video Preview - 16:9 aspect ratio container */}
+              <div className="relative w-full max-w-2xl mx-auto" style={{ aspectRatio: '16/9' }}>
+                <div className="absolute inset-0 bg-black rounded-xl overflow-hidden">
+                  <video
+                    src={videoPreviewUrl}
+                    className="w-full h-full object-contain"
+                    controls
+                    muted
+                  />
+                </div>
+              </div>
+              
+              {/* File info */}
+              <div className="text-center space-y-1">
+                <p className="font-medium">{selectedFile.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                </p>
+              </div>
+              
               <div>
                 <label className="text-sm font-medium mb-2 block">Caption</label>
                 <Textarea
@@ -207,24 +229,28 @@ export default function ContentPage() {
                   rows={3}
                   value={newContent.caption}
                   onChange={(e) => setNewContent(prev => ({ ...prev, caption: e.target.value }))}
-                  className="resize-none"
+                  className="resize-none max-w-2xl mx-auto"
                 />
               </div>
-              <div className="flex gap-3">
-                <Button onClick={handleUpload} className="flex-1" variant="default">
+              
+              <div className="flex gap-3 justify-center">
+                <Button onClick={handleUpload} variant="default">
                   <Upload className="w-4 h-4" />
                   Add to Queue
                 </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setSelectedFile(null);
-                    setNewContent({ fileName: '', caption: '' });
-                  }}
-                >
+                <Button variant="outline" onClick={clearPreview}>
                   Cancel
                 </Button>
               </div>
+            </div>
+          ) : (
+            <div 
+              onClick={handleUploadClick}
+              className="border-2 border-dashed border-border rounded-xl p-12 text-center hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer"
+            >
+              <CloudUpload className="w-16 h-16 mx-auto mb-4 text-primary" />
+              <h3 className="text-lg font-semibold mb-2">Click to upload video</h3>
+              <p className="text-muted-foreground text-sm">or drag & drop your video file here</p>
             </div>
           )}
         </div>

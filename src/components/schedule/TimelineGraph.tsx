@@ -30,7 +30,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   const { contents, updateContent } = useContents();
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [highlightedHour, setHighlightedHour] = useState<number | null>(null);
+  
   
   const [selectedSlot, setSelectedSlot] = useState<{
     date: Date;
@@ -58,7 +58,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   // Get pending contents for scheduling
   const pendingContents = contents.filter(c => c.status === 'pending');
   
-  // Auto-scroll and highlight effect
+  // Auto-scroll effect
   useEffect(() => {
     if (scrollToHour !== null && scrollToHour !== undefined && scrollContainerRef.current) {
       const hourRow = scrollContainerRef.current.querySelector(`[data-hour="${scrollToHour}"]`);
@@ -66,14 +66,6 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
         setTimeout(() => {
           hourRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
-        
-        // Set highlight and clear after 3 seconds
-        setHighlightedHour(scrollToHour);
-        const timer = setTimeout(() => {
-          setHighlightedHour(null);
-        }, 3000);
-        
-        return () => clearTimeout(timer);
       }
     }
   }, [scrollToHour]);
@@ -257,7 +249,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
       
       <div className="glass rounded-xl border border-border overflow-hidden">
         {/* Date Headers */}
-        <div className="grid grid-cols-[60px_repeat(4,1fr)] border-b border-border">
+        <div className="grid grid-cols-[60px_repeat(4,minmax(120px,1fr))] border-b border-border sticky top-0 bg-background z-10">
           <div className="p-4 bg-secondary/30" />
           {dates.map(date => (
             <div 
@@ -280,15 +272,12 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
         </div>
         
         {/* Timeline Grid */}
-        <div ref={scrollContainerRef} className="max-h-[600px] overflow-y-auto scrollbar-thin">
+        <div ref={scrollContainerRef} className="max-h-[600px] overflow-auto scrollbar-thin">
           {HOURS.map(hour => (
             <div 
               key={hour} 
               data-hour={hour}
-              className={cn(
-                "grid grid-cols-[60px_repeat(4,1fr)] border-b border-border/50 last:border-b-0 transition-all duration-500",
-                highlightedHour === hour && "ring-2 ring-primary bg-primary/10"
-              )}
+              className="grid grid-cols-[60px_repeat(4,minmax(120px,1fr))] border-b border-border/50 last:border-b-0"
             >
               {/* Hour Label */}
               <div className="p-2 text-center text-sm text-muted-foreground bg-secondary/20 flex items-center justify-center">
@@ -324,10 +313,10 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                   >
                     {slotContents.length > 0 ? (
                       <div className={cn(
-                        "h-full space-y-1",
+                        "h-full space-y-1 overflow-hidden",
                         slotContents.length > 2 && "max-h-[80px] overflow-y-auto scrollbar-thin"
                       )}>
-                        {slotContents.map((content, idx) => (
+                        {slotContents.map((content) => (
                           <div 
                             key={content.id}
                             draggable={!isPast}
@@ -341,11 +330,10 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                             }}
                             onMouseDown={(e) => e.stopPropagation()}
                             className={cn(
-                              "rounded-md p-1.5 text-xs transition-all duration-200 select-none",
+                              "rounded-md p-1.5 text-xs transition-all duration-200 select-none overflow-hidden",
                               !isPast && "cursor-grab active:cursor-grabbing",
                               "bg-primary/20 border border-primary/30 hover:bg-primary/30",
-                              draggedItem?.id === content.id && "opacity-50 ring-2 ring-primary",
-                              highlightContentId === content.id && "ring-2 ring-amber-400 bg-amber-100 animate-pulse"
+                              draggedItem?.id === content.id && "opacity-50 ring-2 ring-primary"
                             )}
                           >
                             <div className="flex items-center gap-1">

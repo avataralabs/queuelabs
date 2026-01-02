@@ -180,11 +180,22 @@ export default function ContentPage() {
   
   // Find next available date for a specific slot (for auto-assign)
   const findNextAvailableDateForSlot = (slotId: string): Date => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
+    const now = new Date();
     const slot = slots.find(s => s.id === slotId);
-    if (!slot) return today;
+    if (!slot) return now;
+    
+    // Start from today at midnight
+    const startDate = new Date();
+    startDate.setHours(0, 0, 0, 0);
+    
+    // Check if slot time has already passed today
+    const todaySlotTime = new Date();
+    todaySlotTime.setHours(slot.hour, slot.minute, 0, 0);
+    
+    // If slot time already passed today, start from tomorrow
+    if (now > todaySlotTime) {
+      startDate.setDate(startDate.getDate() + 1);
+    }
     
     // Get all dates that already have content assigned to this slot
     const occupiedDates = contents
@@ -196,9 +207,9 @@ export default function ContentPage() {
       })
       .filter(Boolean);
     
-    // Find the first available date starting from today
+    // Find the first available date starting from startDate
     for (let i = 0; i < 365; i++) {
-      const checkDate = new Date(today);
+      const checkDate = new Date(startDate);
       checkDate.setDate(checkDate.getDate() + i);
       
       // For weekly slots, check if this day of week is active
@@ -214,7 +225,7 @@ export default function ContentPage() {
       }
     }
     
-    return today; // fallback
+    return startDate; // fallback
   };
   
   const handleMultiAssign = async () => {

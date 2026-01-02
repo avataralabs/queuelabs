@@ -1,11 +1,14 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAppStore } from '@/stores/appStore';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { PlatformBadge } from '@/components/common/PlatformBadge';
+import { PlatformIcon } from '@/components/common/PlatformIcon';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useProfiles, Platform, ConnectedAccount } from '@/hooks/useProfiles';
+import { useContents } from '@/hooks/useContents';
+import { useScheduleSlots } from '@/hooks/useScheduleSlots';
 
 import { 
   Dialog, 
@@ -20,17 +23,12 @@ import { toast } from 'sonner';
 
 export default function ContentPage() {
   const navigate = useNavigate();
-  const { 
-    contents, 
-    profiles, 
-    scheduleSlots,
-    addContent, 
-    deleteContent, 
-    assignContentToProfile,
-    getRemovedContents,
-    restoreRemovedContent,
-    permanentDeleteContent,
-  } = useAppStore();
+  
+  // Use Supabase hooks instead of local storage
+  const { profiles, isLoading: profilesLoading } = useProfiles();
+  const { contents, isLoading: contentsLoading, addContent, updateContent, deleteContent } = useContents();
+  const { slots, isLoading: slotsLoading } = useScheduleSlots();
+  
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null);
   const [isFromTrash, setIsFromTrash] = useState(false);
@@ -41,12 +39,35 @@ export default function ContentPage() {
   
   const pendingContents = contents.filter(c => c.status === 'pending');
   const assignedContents = contents.filter(c => c.status === 'assigned' || c.status === 'scheduled');
-  const removedContents = getRemovedContents();
+  const removedContents = contents.filter(c => c.status === 'removed');
   
-  const getProfileById = (id?: string) => profiles.find(p => p.id === id);
+  const getProfileById = (id?: string | null) => profiles.find(p => p.id === id);
   
-  const getProfileHasSlots = (profileId: string) => {
-    return scheduleSlots.some(s => s.profileId === profileId && s.isActive);
+  // Check if a profile+platform combination has active slots
+  const getProfilePlatformHasSlots = (profileId: string, platform: string) => {
+    return slots.some(s => s.profile_id === profileId && s.platform === platform && s.is_active);
+  };
+  
+  // Get all connected accounts across all profiles with their parent profile info
+  const getAllConnectedAccounts = () => {
+    const accounts: Array<{
+      profile: typeof profiles[0];
+      account: ConnectedAccount;
+      hasSlots: boolean;
+    }> = [];
+    
+    profiles.forEach(profile => {
+      const connectedAccounts = profile.connected_accounts as ConnectedAccount[] || [];
+      connectedAccounts.forEach(account => {
+        accounts.push({
+          profile,
+          account,
+          hasSlots: getProfilePlatformHasSlots(profile.id, account.platform)
+        });
+      });
+    });
+    
+    return accounts;
   };
   
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,10 +85,17 @@ export default function ContentPage() {
   const handleUpload = () => {
     if (!newContent.fileName.trim()) return;
     
-    addContent({
-      fileName: newContent.fileName,
-      caption: newContent.caption,
-      fileSize: selectedFile?.size || Math.random() * 100 * 1024 * 1024,
+    addContent.mutate({
+      file_name: newContent.fileName,
+      caption: newContent.caption || null,
+      file_size: selectedFile?.size || 0,
+      file_url: null,
+      assigned_profile_id: null,
+      scheduled_at: null,
+      scheduled_slot_id: null,
+      status: 'pending',
+      removed_at: null,
+      removed_from_profile_id: null
     });
     
     setNewContent({ fileName: '', caption: '' });
@@ -81,21 +109,24 @@ export default function ContentPage() {
     setAssignDialogOpen(true);
   };
   
-  const handleAssign = (profileId: string) => {
+  const handleAssign = (profileId: string, platform: string) => {
     if (!selectedContentId) return;
     
-    const hasSlots = getProfileHasSlots(profileId);
+    const hasSlots = getProfilePlatformHasSlots(profileId, platform);
     if (!hasSlots) {
-      toast.error('This profile has no time slots. Please create time slots first.');
+      toast.error('This account has no time slots. Please create time slots first.');
       return;
     }
     
-    // If from trash, restore first then assign
-    if (isFromTrash) {
-      restoreRemovedContent(selectedContentId);
-    }
+    // Update content status and assign to profile
+    updateContent.mutate({
+      id: selectedContentId,
+      assigned_profile_id: profileId,
+      status: 'assigned',
+      removed_at: null,
+      removed_from_profile_id: null
+    });
     
-    assignContentToProfile(selectedContentId, profileId);
     setAssignDialogOpen(false);
     setSelectedContentId(null);
     setIsFromTrash(false);
@@ -103,15 +134,32 @@ export default function ContentPage() {
   };
   
   const handleAssignedContentClick = (content: typeof assignedContents[0]) => {
-    if (content.assignedProfileId) {
-      navigate(`/schedule?profile=${content.assignedProfileId}`);
+    if (content.assigned_profile_id) {
+      navigate(`/schedule?profile=${content.assigned_profile_id}`);
+    }
+  };
+  
+  const handleDeleteContent = (contentId: string) => {
+    // Move to trash (set status to removed)
+    const content = contents.find(c => c.id === contentId);
+    if (content) {
+      updateContent.mutate({
+        id: contentId,
+        status: 'removed',
+        removed_at: new Date().toISOString(),
+        removed_from_profile_id: content.assigned_profile_id
+      });
+      toast.success('Content moved to trash');
     }
   };
   
   const handlePermanentDelete = (contentId: string) => {
-    permanentDeleteContent(contentId);
+    deleteContent.mutate(contentId);
     toast.success('Content permanently deleted');
   };
+
+  const isLoading = profilesLoading || contentsLoading || slotsLoading;
+  const connectedAccounts = getAllConnectedAccounts();
   
   return (
     <MainLayout>
@@ -210,7 +258,11 @@ export default function ContentPage() {
           {/* Pending Tab */}
           <TabsContent value="pending" className="mt-4">
             <div className="glass rounded-xl p-4">
-              {pendingContents.length === 0 ? (
+              {isLoading ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>Loading...</p>
+                </div>
+              ) : pendingContents.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <FileVideo className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p className="font-medium">No pending content</p>
@@ -227,11 +279,11 @@ export default function ContentPage() {
                         <div className="flex items-center gap-3 flex-1 min-w-0">
                           <FileVideo className="w-5 h-5 text-primary flex-shrink-0" />
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium truncate" title={content.fileName}>
-                              {content.fileName}
+                            <p className="font-medium truncate" title={content.file_name}>
+                              {content.file_name}
                             </p>
                             <p className="text-sm text-muted-foreground">
-                              {format(new Date(content.uploadedAt), 'MMM d, yyyy HH:mm')}
+                              {format(new Date(content.uploaded_at), 'MMM d, yyyy HH:mm')}
                             </p>
                             {content.caption && (
                               <p className="text-sm text-muted-foreground truncate mt-1">
@@ -252,7 +304,7 @@ export default function ContentPage() {
                           <Button 
                             size="icon-sm" 
                             variant="ghost"
-                            onClick={() => deleteContent(content.id)}
+                            onClick={() => handleDeleteContent(content.id)}
                           >
                             <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
@@ -268,7 +320,11 @@ export default function ContentPage() {
           {/* Assigned Tab */}
           <TabsContent value="assigned" className="mt-4">
             <div className="glass rounded-xl p-4">
-              {assignedContents.length === 0 ? (
+              {isLoading ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>Loading...</p>
+                </div>
+              ) : assignedContents.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p className="font-medium">No assigned content</p>
@@ -277,7 +333,7 @@ export default function ContentPage() {
               ) : (
                 <div className="space-y-2">
                   {assignedContents.map(content => {
-                    const profile = getProfileById(content.assignedProfileId);
+                    const profile = getProfileById(content.assigned_profile_id);
                     return (
                       <div 
                         key={content.id}
@@ -288,16 +344,16 @@ export default function ContentPage() {
                           <div className="flex items-center gap-3 flex-1 min-w-0">
                             <FileVideo className="w-5 h-5 text-primary flex-shrink-0" />
                             <div className="min-w-0 flex-1">
-                              <p className="font-medium truncate" title={content.fileName}>
-                                {content.fileName}
+                              <p className="font-medium truncate" title={content.file_name}>
+                                {content.file_name}
                               </p>
                               {profile && (
                                 <div className="flex items-center gap-2 mt-1">
-                                  <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />
+                                  <PlatformBadge platform={profile.platform as Platform} size="sm" showLabel={false} />
                                   <span className="text-sm text-muted-foreground">{profile.name}</span>
-                                  {content.scheduledAt && (
+                                  {content.scheduled_at && (
                                     <span className="text-sm text-primary">
-                                      • {format(new Date(content.scheduledAt), 'MMM d, HH:mm')}
+                                      • {format(new Date(content.scheduled_at), 'MMM d, HH:mm')}
                                     </span>
                                   )}
                                 </div>
@@ -327,7 +383,11 @@ export default function ContentPage() {
           {/* Trash Tab */}
           <TabsContent value="trash" className="mt-4">
             <div className="glass rounded-xl p-4 border border-orange-200 bg-orange-50/50">
-              {removedContents.length === 0 ? (
+              {isLoading ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>Loading...</p>
+                </div>
+              ) : removedContents.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Trash2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p className="font-medium">Trash is empty</p>
@@ -336,8 +396,8 @@ export default function ContentPage() {
               ) : (
                 <div className="space-y-2">
                   {removedContents.map(content => {
-                    const profile = content.removedFromProfileId 
-                      ? getProfileById(content.removedFromProfileId) 
+                    const profile = content.removed_from_profile_id 
+                      ? getProfileById(content.removed_from_profile_id) 
                       : null;
                     return (
                       <div 
@@ -348,20 +408,20 @@ export default function ContentPage() {
                           <div className="flex items-center gap-3 flex-1 min-w-0">
                             <FileVideo className="w-5 h-5 text-orange-600 flex-shrink-0" />
                             <div className="min-w-0 flex-1">
-                              <p className="font-medium truncate" title={content.fileName}>
-                                {content.fileName}
+                              <p className="font-medium truncate" title={content.file_name}>
+                                {content.file_name}
                               </p>
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 {profile && (
                                   <>
                                     <span>Removed from:</span>
-                                    <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />
+                                    <PlatformBadge platform={profile.platform as Platform} size="sm" showLabel={false} />
                                     <span>{profile.name}</span>
                                   </>
                                 )}
-                                {content.removedAt && (
+                                {content.removed_at && (
                                   <span className="ml-2">
-                                    • {format(new Date(content.removedAt), 'MMM d, HH:mm')}
+                                    • {format(new Date(content.removed_at), 'MMM d, HH:mm')}
                                   </span>
                                 )}
                               </div>
@@ -395,51 +455,66 @@ export default function ContentPage() {
           </TabsContent>
         </Tabs>
         
-        {/* Assign Dialog */}
+        {/* Assign Dialog - Show connected accounts per platform */}
         <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
           <DialogContent className="bg-card border-border">
             <DialogHeader>
               <DialogTitle>Assign to Profile</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-4">
-              {profiles.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  No profiles created yet. Create a profile first.
-                </p>
+              {connectedAccounts.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground mb-4">
+                    No connected accounts yet. Connect your social media accounts first.
+                  </p>
+                  <Button variant="outline" onClick={() => navigate('/profiles')}>
+                    Go to Profiles
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-2">
-                  {profiles.map(profile => {
-                    const hasSlots = getProfileHasSlots(profile.id);
-                    return (
-                      <button
-                        key={profile.id}
-                        onClick={() => handleAssign(profile.id)}
-                        disabled={!hasSlots}
-                        className={cn(
-                          "w-full p-4 rounded-lg transition-colors flex items-center justify-between",
-                          hasSlots 
-                            ? "bg-secondary/50 hover:bg-secondary" 
-                            : "bg-muted/30 opacity-60 cursor-not-allowed"
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="font-medium">{profile.name}</span>
-                          <PlatformBadge platform={profile.platform} size="sm" />
+                  {connectedAccounts.map(({ profile, account, hasSlots }) => (
+                    <button
+                      key={`${profile.id}-${account.platform}`}
+                      onClick={() => handleAssign(profile.id, account.platform)}
+                      disabled={!hasSlots}
+                      className={cn(
+                        "w-full flex items-center gap-3 p-4 rounded-lg transition-colors text-left",
+                        hasSlots 
+                          ? "hover:bg-secondary cursor-pointer" 
+                          : "opacity-50 cursor-not-allowed bg-secondary/30"
+                      )}
+                    >
+                      {account.profile_picture ? (
+                        <img 
+                          src={account.profile_picture} 
+                          alt={account.username}
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                          <PlatformIcon platform={account.platform as Platform} className="w-5 h-5" />
                         </div>
-                        {!hasSlots && (
-                          <div className="flex items-center gap-1 text-destructive text-sm">
-                            <AlertCircle className="w-4 h-4" />
-                            <span>No time slots</span>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
+                          <span className="font-medium">{account.username}</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {profile.name}
+                        </p>
+                      </div>
+                      {!hasSlots && (
+                        <div className="flex items-center gap-1 text-warning text-xs">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>No time slots</span>
+                        </div>
+                      )}
+                    </button>
+                  ))}
                 </div>
               )}
-              <p className="text-xs text-muted-foreground text-center">
-                Profiles without time slots cannot receive content
-              </p>
             </div>
           </DialogContent>
         </Dialog>

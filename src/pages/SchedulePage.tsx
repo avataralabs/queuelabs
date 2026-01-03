@@ -33,6 +33,10 @@ export default function SchedulePage() {
   const [baseDate, setBaseDate] = useState(new Date());
   const [showSlotManager, setShowSlotManager] = useState(false);
   
+  // Filter states
+  const [selectedProfileFilter, setSelectedProfileFilter] = useState<string>('all');
+  const [selectedPlatformFilter, setSelectedPlatformFilter] = useState<string>('all');
+  
   // Flatten profiles menjadi account items (1 connected account = 1 dropdown item)
   const accountItems = useMemo(() => {
     const items: AccountItem[] = [];
@@ -63,6 +67,15 @@ export default function SchedulePage() {
     
     return items;
   }, [profiles]);
+  
+  // Filtered account items based on filters
+  const filteredAccountItems = useMemo(() => {
+    return accountItems.filter(item => {
+      const matchProfile = selectedProfileFilter === 'all' || item.profileId === selectedProfileFilter;
+      const matchPlatform = selectedPlatformFilter === 'all' || item.platform === selectedPlatformFilter;
+      return matchProfile && matchPlatform;
+    });
+  }, [accountItems, selectedProfileFilter, selectedPlatformFilter]);
   
   // Parse selected value
   const selectedProfileId = selectedValue.split('|')[0];
@@ -186,12 +199,54 @@ export default function SchedulePage() {
           </div>
         ) : (
           <>
-            {/* Profile Selector & Navigation */}
+            {/* Filters & Profile Selector */}
             <div className="glass rounded-xl border border-border p-4">
               <div className="flex items-center justify-between flex-wrap gap-4">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Profile Filter */}
+                  <Select value={selectedProfileFilter} onValueChange={setSelectedProfileFilter}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="All Profiles" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Profiles</SelectItem>
+                      {profiles.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  {/* Platform Filter */}
+                  <Select value={selectedPlatformFilter} onValueChange={setSelectedPlatformFilter}>
+                    <SelectTrigger className="w-[130px]">
+                      <SelectValue placeholder="All Platforms" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Platforms</SelectItem>
+                      <SelectItem value="instagram">
+                        <div className="flex items-center gap-2">
+                          <PlatformBadge platform="instagram" size="sm" showLabel={false} variant="icon" />
+                          <span>Instagram</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="youtube">
+                        <div className="flex items-center gap-2">
+                          <PlatformBadge platform="youtube" size="sm" showLabel={false} variant="icon" />
+                          <span>YouTube</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="tiktok">
+                        <div className="flex items-center gap-2">
+                          <PlatformBadge platform="tiktok" size="sm" showLabel={false} variant="icon" />
+                          <span>TikTok</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {/* Main Account Selector */}
                   <Select value={selectedValue} onValueChange={setSelectedValue}>
-                    <SelectTrigger className="w-[280px]">
+                    <SelectTrigger className="w-[220px]">
                       {selectedProfile && selectedPlatform ? (
                         <div className="flex items-center gap-2">
                           <PlatformBadge platform={selectedPlatform} size="sm" showLabel={false} variant="icon" />
@@ -202,24 +257,31 @@ export default function SchedulePage() {
                       )}
                     </SelectTrigger>
                     <SelectContent>
-                      {accountItems.map((item, index) => (
-                        <SelectItem 
-                          key={`${item.profileId}-${item.platform}-${index}`} 
-                          value={`${item.profileId}|${item.platform}`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <PlatformBadge platform={item.platform} size="sm" showLabel={false} variant="icon" />
-                            <span>{item.profileName}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
+                      {filteredAccountItems.length > 0 ? (
+                        filteredAccountItems.map((item, index) => (
+                          <SelectItem 
+                            key={`${item.profileId}-${item.platform}-${index}`} 
+                            value={`${item.profileId}|${item.platform}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <PlatformBadge platform={item.platform} size="sm" showLabel={false} variant="icon" />
+                              <span>{item.profileName}</span>
+                              {item.username && <span className="text-muted-foreground text-xs">@{item.username}</span>}
+                            </div>
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                          No accounts match filters
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                   
                   {selectedProfile && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground ml-2">
                       <Clock className="w-4 h-4" />
-                      <span>{activeSlots.length} active slots</span>
+                      <span>{activeSlots.length} slots</span>
                     </div>
                   )}
                 </div>

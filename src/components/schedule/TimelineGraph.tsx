@@ -323,8 +323,8 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                       slotContents.length > 0 && "bg-timeline-slot-filled",
                       isPast && "opacity-50",
                       isToday(date) && "bg-primary/5",
-                      isDragOver && !hasDraggedItemHere && "ring-2 ring-primary bg-primary/20",
-                      isDragOver && slotContents.length > 0 && !hasDraggedItemHere && "ring-2 ring-amber-400 bg-amber-100"
+                      isDragOver && !hasDraggedItemHere && "ring-2 ring-primary bg-primary/20 scale-[1.02] animate-pulse",
+                      isDragOver && slotContents.length > 0 && !hasDraggedItemHere && "ring-2 ring-amber-400 bg-amber-100/50 scale-[1.02] animate-pulse"
                     )}
                   >
                     {slotContents.length > 0 ? (
@@ -349,7 +349,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                               "rounded-md p-1.5 text-xs transition-all duration-200 select-none overflow-hidden",
                               !isPast && "cursor-grab active:cursor-grabbing",
                               "bg-primary/20 border border-primary/30 hover:bg-primary/30",
-                              draggedItem?.id === content.id && "opacity-50 ring-2 ring-primary"
+                              draggedItem?.id === content.id && "opacity-50 ring-2 ring-primary scale-95 rotate-1 shadow-lg"
                             )}
                           >
                             <div className="flex items-center gap-1">

@@ -18,6 +18,13 @@ import {
   DialogTitle,
   DialogFooter
 } from '@/components/ui/dialog';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, AlertCircle, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -51,6 +58,10 @@ export default function ContentPage() {
   
   // Multi-select state
   const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
+  
+  // Filter states for assign dialog
+  const [dialogProfileFilter, setDialogProfileFilter] = useState<string>('all');
+  const [dialogPlatformFilter, setDialogPlatformFilter] = useState<string>('all');
   
   const pendingContents = contents.filter(c => c.status === 'pending');
   const assignedContents = contents.filter(c => c.status === 'assigned' || c.status === 'scheduled');
@@ -165,6 +176,8 @@ export default function ContentPage() {
     setSelectedContentId(contentId);
     setIsFromTrash(fromTrash);
     setSelectedSlots([]); // Reset selections
+    setDialogProfileFilter('all'); // Reset filters
+    setDialogPlatformFilter('all');
     setAssignDialogOpen(true);
   };
   
@@ -327,6 +340,19 @@ export default function ContentPage() {
 
   const isLoading = profilesLoading || contentsLoading || slotsLoading;
   const { accountsWithSlots, accountsWithoutSlots } = getAllConnectedAccountsWithSlots();
+  
+  // Filter accounts based on dialog filters
+  const filteredAccountsWithSlots = accountsWithSlots.filter(({ profile, account }) => {
+    const matchProfile = dialogProfileFilter === 'all' || profile.id === dialogProfileFilter;
+    const matchPlatform = dialogPlatformFilter === 'all' || account.platform === dialogPlatformFilter;
+    return matchProfile && matchPlatform;
+  });
+
+  const filteredAccountsWithoutSlots = accountsWithoutSlots.filter(({ profile, account }) => {
+    const matchProfile = dialogProfileFilter === 'all' || profile.id === dialogProfileFilter;
+    const matchPlatform = dialogPlatformFilter === 'all' || account.platform === dialogPlatformFilter;
+    return matchProfile && matchPlatform;
+  });
   
   return (
     <MainLayout>
@@ -684,8 +710,51 @@ export default function ContentPage() {
             <DialogHeader>
               <DialogTitle>Assign to Profile</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 pt-4">
-              {accountsWithSlots.length === 0 && accountsWithoutSlots.length === 0 ? (
+            
+            {/* Filters */}
+            <div className="flex items-center gap-2 pt-2">
+              <Select value={dialogProfileFilter} onValueChange={setDialogProfileFilter}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="All Profiles" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Profiles</SelectItem>
+                  {profiles.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Select value={dialogPlatformFilter} onValueChange={setDialogPlatformFilter}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="All Platforms" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Platforms</SelectItem>
+                  <SelectItem value="instagram">
+                    <div className="flex items-center gap-2">
+                      <PlatformIcon platform="instagram" className="w-4 h-4" />
+                      <span>Instagram</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="youtube">
+                    <div className="flex items-center gap-2">
+                      <PlatformIcon platform="youtube" className="w-4 h-4" />
+                      <span>YouTube</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="tiktok">
+                    <div className="flex items-center gap-2">
+                      <PlatformIcon platform="tiktok" className="w-4 h-4" />
+                      <span>TikTok</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-4">
+              {filteredAccountsWithSlots.length === 0 && filteredAccountsWithoutSlots.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground mb-4">
                     No connected accounts yet. Connect your social media accounts first.
@@ -695,9 +764,9 @@ export default function ContentPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
                   {/* Accounts with slots - each slot is a separate row with checkbox */}
-                  {accountsWithSlots.map(({ profile, account, slot }) => {
+                  {filteredAccountsWithSlots.map(({ profile, account, slot }) => {
                     const slotKey = slot.id;
                     const isSelected = isSlotSelected(slotKey);
                     const slotData: SelectedSlot = {
@@ -756,7 +825,7 @@ export default function ContentPage() {
                   })}
                   
                   {/* Accounts without slots - disabled */}
-                  {accountsWithoutSlots.map(({ profile, account }) => (
+                  {filteredAccountsWithoutSlots.map(({ profile, account }) => (
                     <div
                       key={`${profile.id}-${account.platform}-no-slot`}
                       className="flex items-center gap-3 p-4 rounded-lg transition-colors opacity-50 cursor-not-allowed bg-secondary/30"
@@ -793,7 +862,7 @@ export default function ContentPage() {
             </div>
             
             {/* Footer with selected count and assign button */}
-            {(accountsWithSlots.length > 0 || accountsWithoutSlots.length > 0) && (
+            {(filteredAccountsWithSlots.length > 0 || filteredAccountsWithoutSlots.length > 0) && (
               <DialogFooter className="flex items-center justify-between sm:justify-between">
                 <span className="text-sm text-muted-foreground">
                   {selectedSlots.length} selected

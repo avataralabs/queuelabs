@@ -120,9 +120,17 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
     slotTime.setHours(hour, 0, 0, 0);
     if (isBefore(slotTime, new Date())) return;
     
-    if (slotContents.length > 0 || (hasSlot && pendingContents.length > 0)) {
-      setSelectedSlot({ date, hour, contents: slotContents });
+    // Only open dialog for empty slots with pending content
+    if (hasSlot && slotContents.length === 0 && pendingContents.length > 0) {
+      setSelectedSlot({ date, hour, contents: [] });
     }
+  };
+  
+  // Double-click handler for content items - opens manage dialog
+  const handleContentDoubleClick = (e: React.MouseEvent, date: Date, hour: number, slotContents: typeof contents) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setSelectedSlot({ date, hour, contents: slotContents });
   };
   
   const handleAssignContent = (contentId: string) => {
@@ -364,7 +372,9 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                           <div 
                             key={content.id}
                             draggable={!isPast}
+                            title="Double-click to manage, drag to move"
                             onClick={(e) => e.stopPropagation()}
+                            onDoubleClick={(e) => handleContentDoubleClick(e, date, hour, slotContents)}
                             onDragStart={(e) => {
                               e.stopPropagation();
                               handleDragStart(e, content);
@@ -373,7 +383,6 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                               e.stopPropagation();
                               handleDragEnd();
                             }}
-                            onMouseDown={(e) => e.stopPropagation()}
                             className={cn(
                               "rounded-md p-1.5 text-xs transition-all duration-200 select-none overflow-hidden",
                               !isPast && "cursor-grab active:cursor-grabbing",
@@ -402,7 +411,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                       </div>
                     ) : hasSlot && !isPast ? (
                       <div className="h-full flex items-center justify-center text-muted-foreground opacity-0 hover:opacity-100 transition-opacity">
-                        <span className="text-xs">+ Add</span>
+                        <span className="text-xs">Click to add</span>
                       </div>
                     ) : null}
                   </div>

@@ -19,6 +19,9 @@ export interface Content {
   removed_at: string | null;
   removed_from_profile_id: string | null;
   user_id: string;
+  is_locked: boolean | null;
+  upload_attempted_at: string | null;
+  webhook_response: unknown | null;
 }
 
 export function useContents(status?: ContentStatus | ContentStatus[]) {
@@ -51,11 +54,23 @@ export function useContents(status?: ContentStatus | ContentStatus[]) {
   });
 
   const addContent = useMutation({
-    mutationFn: async (content: Omit<Content, 'id' | 'user_id' | 'uploaded_at'>) => {
+    mutationFn: async (content: Partial<Omit<Content, 'id' | 'user_id' | 'uploaded_at'>> & { file_name: string }) => {
       if (!user) throw new Error('Not authenticated');
       const { data, error } = await supabase
         .from('contents')
-        .insert({ ...content, user_id: user.id })
+        .insert({ 
+          file_name: content.file_name,
+          caption: content.caption ?? null,
+          file_size: content.file_size ?? 0,
+          file_url: content.file_url ?? null,
+          assigned_profile_id: content.assigned_profile_id ?? null,
+          scheduled_at: content.scheduled_at ?? null,
+          scheduled_slot_id: content.scheduled_slot_id ?? null,
+          status: content.status ?? 'pending',
+          removed_at: content.removed_at ?? null,
+          removed_from_profile_id: content.removed_from_profile_id ?? null,
+          user_id: user.id 
+        })
         .select()
         .single();
       
@@ -71,7 +86,7 @@ export function useContents(status?: ContentStatus | ContentStatus[]) {
   });
 
   const updateContent = useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<Content> & { id: string }) => {
+    mutationFn: async ({ id, ...updates }: Partial<Omit<Content, 'user_id' | 'uploaded_at' | 'webhook_response'>> & { id: string }) => {
       const { error } = await supabase
         .from('contents')
         .update(updates)

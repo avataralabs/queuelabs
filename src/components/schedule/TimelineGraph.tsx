@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, DragEvent } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useScheduleSlots } from '@/hooks/useScheduleSlots';
 import { useContents } from '@/hooks/useContents';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   const [dragOverSlot, setDragOverSlot] = useState<{ date: Date; hour: number } | null>(null);
   const [lastDroppedId, setLastDroppedId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
   
   // Filter slots by profileId AND platform
   const profileSlots = allSlots.filter(s => 
@@ -182,37 +183,34 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   };
   
   // Drag and Drop handlers
-  const handleDragStart = (e: DragEvent, content: typeof contents[0]) => {
-    setIsDragging(true);
-    setDraggedItem(content);
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, content: typeof contents[0]) => {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', content.id);
     
-    // Create custom drag image
-    const dragPreview = document.createElement('div');
-    dragPreview.className = 'bg-primary text-primary-foreground px-3 py-2 rounded-lg shadow-2xl text-sm font-medium flex items-center gap-2';
-    dragPreview.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
-      ${content.file_name.length > 20 ? content.file_name.slice(0, 20) + '...' : content.file_name}
-    `;
-    dragPreview.style.cssText = 'position: absolute; top: -1000px; left: -1000px; z-index: 9999;';
-    document.body.appendChild(dragPreview);
+    // Create transparent 1x1 image to hide default drag ghost
+    const emptyImg = document.createElement('img');
+    emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    e.dataTransfer.setDragImage(emptyImg, 0, 0);
     
-    e.dataTransfer.setDragImage(dragPreview, dragPreview.offsetWidth / 2, dragPreview.offsetHeight / 2);
-    
-    // Remove after drag image is captured
-    requestAnimationFrame(() => {
-      document.body.removeChild(dragPreview);
-    });
+    setIsDragging(true);
+    setDraggedItem(content);
+    setDragPosition({ x: e.clientX, y: e.clientY });
   };
   
   const handleDragEnd = () => {
     setIsDragging(false);
     setDraggedItem(null);
     setDragOverSlot(null);
+    setDragPosition(null);
   };
   
-  const handleDragOver = (e: DragEvent, date: Date, hour: number) => {
+  const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
+    if (e.clientX !== 0 || e.clientY !== 0) {
+      setDragPosition({ x: e.clientX, y: e.clientY });
+    }
+  };
+  
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, date: Date, hour: number) => {
     e.preventDefault();
     const slotTime = new Date(date);
     slotTime.setHours(hour, 0, 0, 0);
@@ -231,7 +229,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
     setDragOverSlot(null);
   };
   
-  const handleDrop = (e: DragEvent, date: Date, hour: number) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, date: Date, hour: number) => {
     e.preventDefault();
     setDragOverSlot(null);
     
@@ -379,6 +377,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                               e.stopPropagation();
                               handleDragStart(e, content);
                             }}
+                            onDrag={(e) => handleDrag(e)}
                             onDragEnd={(e) => {
                               e.stopPropagation();
                               handleDragEnd();
@@ -537,6 +536,22 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
             )}
           </DialogContent>
         </Dialog>
+        
+        {/* Custom Drag Indicator */}
+        {isDragging && draggedItem && dragPosition && (
+          <div 
+            className="fixed z-[99999] pointer-events-none bg-primary text-primary-foreground px-3 py-2 rounded-lg shadow-2xl text-sm font-medium flex items-center gap-2"
+            style={{ 
+              left: dragPosition.x + 15, 
+              top: dragPosition.y + 15,
+            }}
+          >
+            <FileVideo className="w-4 h-4" />
+            {draggedItem.file_name.length > 20 
+              ? draggedItem.file_name.slice(0, 20) + '...' 
+              : draggedItem.file_name}
+          </div>
+        )}
       </div>
     </div>
   );

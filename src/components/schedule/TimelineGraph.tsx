@@ -40,6 +40,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   
   const [draggedItem, setDraggedItem] = useState<typeof contents[0] | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<{ date: Date; hour: number } | null>(null);
+  const [lastDroppedId, setLastDroppedId] = useState<string | null>(null);
   
   // Filter slots by profileId AND platform
   const profileSlots = allSlots.filter(s => 
@@ -176,6 +177,23 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
     setDraggedItem(content);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', content.id);
+    
+    // Create custom drag image
+    const dragPreview = document.createElement('div');
+    dragPreview.className = 'bg-primary text-primary-foreground px-3 py-2 rounded-lg shadow-2xl text-sm font-medium flex items-center gap-2';
+    dragPreview.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+      ${content.file_name.length > 20 ? content.file_name.slice(0, 20) + '...' : content.file_name}
+    `;
+    dragPreview.style.cssText = 'position: absolute; top: -1000px; left: -1000px; z-index: 9999;';
+    document.body.appendChild(dragPreview);
+    
+    e.dataTransfer.setDragImage(dragPreview, dragPreview.offsetWidth / 2, dragPreview.offsetHeight / 2);
+    
+    // Remove after drag image is captured
+    requestAnimationFrame(() => {
+      document.body.removeChild(dragPreview);
+    });
   };
   
   const handleDragEnd = () => {
@@ -244,18 +262,25 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
     
     toast.success('Content moved');
     setDraggedItem(null);
+    
+    // Success flash animation
+    setLastDroppedId(draggedItem.id);
+    setTimeout(() => setLastDroppedId(null), 1000);
   };
   
   return (
     <div className="space-y-3">
       {/* Drag Indicator */}
       {draggedItem && (
-        <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/30">
-          <div className="flex items-center gap-2 text-primary">
-            <GripVertical className="w-4 h-4" />
-            <span className="text-sm font-medium">
-              Dragging: {draggedItem.file_name} — Drop on any slot to move
-            </span>
+        <div className="flex items-center justify-between p-3 rounded-lg bg-gradient-to-r from-primary/20 to-primary/10 border border-primary/40 shadow-md animate-fade-in">
+          <div className="flex items-center gap-3 text-primary">
+            <div className="w-8 h-8 rounded bg-primary/30 flex items-center justify-center">
+              <GripVertical className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-sm font-medium block">Moving: {draggedItem.file_name}</span>
+              <span className="text-xs text-muted-foreground">Drop on any available slot</span>
+            </div>
           </div>
           <Button variant="ghost" size="sm" onClick={handleDragEnd}>
             Cancel
@@ -349,7 +374,8 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                               "rounded-md p-1.5 text-xs transition-all duration-200 select-none overflow-hidden",
                               !isPast && "cursor-grab active:cursor-grabbing",
                               "bg-primary/20 border border-primary/30 hover:bg-primary/30",
-                              draggedItem?.id === content.id && "opacity-50 ring-2 ring-primary scale-95 rotate-1 shadow-lg"
+                              draggedItem?.id === content.id && "opacity-30 scale-90 ring-2 ring-dashed ring-primary/50 bg-primary/10",
+                              lastDroppedId === content.id && "animate-pulse ring-2 ring-green-500 bg-green-100 dark:bg-green-900/30"
                             )}
                           >
                             <div className="flex items-center gap-1">

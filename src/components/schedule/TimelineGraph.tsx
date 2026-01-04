@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useScheduleSlots } from '@/hooks/useScheduleSlots';
 import { useContents } from '@/hooks/useContents';
 import { Button } from '@/components/ui/button';
@@ -43,6 +43,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   const [lastDroppedId, setLastDroppedId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isDragIntent, setIsDragIntent] = useState(false);
   
   // Filter slots by profileId AND platform
   const profileSlots = allSlots.filter(s => 
@@ -183,7 +184,8 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   };
   
   // Drag and Drop handlers
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, content: typeof contents[0]) => {
+  const handleDragStart = useCallback((e: React.DragEvent<HTMLDivElement>, content: typeof contents[0]) => {
+    e.stopPropagation();
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', content.id);
     
@@ -192,23 +194,28 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
     emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
     e.dataTransfer.setDragImage(emptyImg, 0, 0);
     
+    setIsDragIntent(true);
     setIsDragging(true);
     setDraggedItem(content);
     setDragPosition({ x: e.clientX, y: e.clientY });
-  };
+  }, []);
   
-  const handleDragEnd = () => {
+  const handleDragEnd = useCallback(() => {
     setIsDragging(false);
     setDraggedItem(null);
     setDragOverSlot(null);
     setDragPosition(null);
-  };
+    setIsDragIntent(false);
+  }, []);
   
-  const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
-    if (e.clientX !== 0 || e.clientY !== 0) {
+  const handleDrag = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    // Browser sends 0,0 at start and end of drag - ignore these
+    if (e.clientX === 0 && e.clientY === 0) return;
+    
+    requestAnimationFrame(() => {
       setDragPosition({ x: e.clientX, y: e.clientY });
-    }
-  };
+    });
+  }, []);
   
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>, date: Date, hour: number) => {
     e.preventDefault();
@@ -371,20 +378,32 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                             key={content.id}
                             draggable={!isPast}
                             title="Double-click to manage, drag to move"
-                            onClick={(e) => e.stopPropagation()}
-                            onDoubleClick={(e) => handleContentDoubleClick(e, date, hour, slotContents)}
-                            onDragStart={(e) => {
+                            onMouseDown={(e) => {
+                              if (isPast) return;
                               e.stopPropagation();
-                              handleDragStart(e, content);
                             }}
-                            onDrag={(e) => handleDrag(e)}
-                            onDragEnd={(e) => {
+                            onClick={(e) => {
                               e.stopPropagation();
-                              handleDragEnd();
+                              // Only stop if it was a drag
+                              if (isDragIntent) {
+                                setIsDragIntent(false);
+                              }
+                            }}
+                            onDoubleClick={(e) => {
+                              if (!isDragIntent) {
+                                handleContentDoubleClick(e, date, hour, slotContents);
+                              }
+                            }}
+                            onDragStart={(e) => handleDragStart(e, content)}
+                            onDrag={handleDrag}
+                            onDragEnd={handleDragEnd}
+                            style={{ 
+                              cursor: isPast ? 'default' : isDragging && draggedItem?.id === content.id ? 'grabbing' : 'grab',
+                              WebkitUserSelect: 'none',
+                              userSelect: 'none'
                             }}
                             className={cn(
-                              "rounded-md p-1.5 text-xs transition-all duration-200 select-none overflow-hidden",
-                              !isPast && "cursor-grab active:cursor-grabbing",
+                              "rounded-md p-1.5 text-xs transition-all duration-200 overflow-hidden touch-none",
                               "bg-primary/20 border border-primary/30 hover:bg-primary/30",
                               draggedItem?.id === content.id && "opacity-30 scale-90 ring-2 ring-dashed ring-primary/50 bg-primary/10",
                               lastDroppedId === content.id && "animate-pulse ring-2 ring-green-500 bg-green-100 dark:bg-green-900/30"

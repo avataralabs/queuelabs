@@ -5,23 +5,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-interface ScheduledContentWithDetails {
+interface AssignedContentWithDetails {
   id: string
-  content_id: string
-  profile_id: string
-  slot_id: string
-  scheduled_date: string
-  hour: number
-  minute: number
+  file_name: string
+  caption: string | null
+  file_url: string | null
+  status: string
+  is_locked: boolean
   user_id: string
-  content: {
-    id: string
-    file_name: string
-    caption: string | null
-    file_url: string | null
-    status: string
-    is_locked: boolean
-  }
+  assigned_profile_id: string
+  scheduled_slot_id: string
+  scheduled_at: string
   profile: {
     id: string
     name: string
@@ -59,40 +53,47 @@ Deno.serve(async (req) => {
     
     console.log(`[${now.toISOString()}] Processing scheduled uploads...`)
 
-    // Get all scheduled contents where scheduled_date <= now and content is not locked
-    const { data: scheduledContents, error: fetchError } = await supabase
-      .from('scheduled_contents')
+    // Get all assigned contents where scheduled_at <= now and not locked
+    const { data: assignedContents, error: fetchError } = await supabase
+      .from('contents')
       .select(`
         *,
-        content:contents!content_id(*),
-        profile:profiles!profile_id(*),
-        slot:schedule_slots!slot_id(*)
+        profile:profiles!assigned_profile_id(*),
+        slot:schedule_slots!scheduled_slot_id(*)
       `)
-      .lte('scheduled_date', now.toISOString())
+      .eq('status', 'assigned')
+      .eq('is_locked', false)
+      .lte('scheduled_at', now.toISOString())
 
     if (fetchError) {
-      console.error('Error fetching scheduled contents:', fetchError)
+      console.error('Error fetching assigned contents:', fetchError)
       throw fetchError
     }
 
-    if (!scheduledContents || scheduledContents.length === 0) {
-      console.log('No scheduled contents to process')
+    if (!assignedContents || assignedContents.length === 0) {
+      console.log('No assigned contents to process')
       return new Response(
-        JSON.stringify({ message: 'No scheduled contents to process', processed: 0 }),
+        JSON.stringify({ message: 'No assigned contents to process', processed: 0 }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log(`Found ${scheduledContents.length} scheduled contents to process`)
+    console.log(`Found ${assignedContents.length} assigned contents to process`)
 
     const results = []
 
-    for (const scheduled of scheduledContents as ScheduledContentWithDetails[]) {
-      const { content, profile, slot } = scheduled
+    for (const content of assignedContents as AssignedContentWithDetails[]) {
+      const { profile, slot } = content
 
-      // Skip if already locked or uploaded
+      // Double-check: skip if already locked or uploaded
       if (content.is_locked || content.status === 'uploaded') {
         console.log(`Skipping content ${content.id} - already locked or uploaded`)
+        continue
+      }
+
+      // Skip if profile or slot not found
+      if (!profile || !slot) {
+        console.log(`Skipping content ${content.id} - missing profile or slot`)
         continue
       }
 
@@ -160,23 +161,13 @@ Deno.serve(async (req) => {
             throw updateError
           }
 
-          // Remove from scheduled_contents
-          const { error: deleteError } = await supabase
-            .from('scheduled_contents')
-            .delete()
-            .eq('id', scheduled.id)
-
-          if (deleteError) {
-            console.error(`Error deleting scheduled content ${scheduled.id}:`, deleteError)
-          }
-
           // Add to upload_history
           const { error: historyError } = await supabase
             .from('upload_history')
             .insert({
               content_id: content.id,
               profile_id: profile.id,
-              user_id: scheduled.user_id,
+              user_id: content.user_id,
               status: 'success',
               uploaded_at: now.toISOString()
             })
@@ -216,7 +207,7 @@ Deno.serve(async (req) => {
             .insert({
               content_id: content.id,
               profile_id: profile.id,
-              user_id: scheduled.user_id,
+              user_id: content.user_id,
               status: 'failed',
               error_message: errorMessage,
               uploaded_at: now.toISOString()

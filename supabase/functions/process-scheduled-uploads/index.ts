@@ -54,15 +54,16 @@ Deno.serve(async (req) => {
     console.log(`[${now.toISOString()}] Processing scheduled uploads...`)
 
     // Get all assigned contents where scheduled_at <= now and not locked
+    // Note: We fetch contents first, then fetch profile separately (no FK between contents and schedule_slots)
     const { data: assignedContents, error: fetchError } = await supabase
       .from('contents')
       .select(`
         *,
-        profile:profiles!assigned_profile_id(*),
-        slot:schedule_slots!scheduled_slot_id(*)
+        profile:profiles!assigned_profile_id(*)
       `)
       .eq('status', 'assigned')
       .eq('is_locked', false)
+      .not('scheduled_at', 'is', null)
       .lte('scheduled_at', now.toISOString())
 
     if (fetchError) {
@@ -82,8 +83,8 @@ Deno.serve(async (req) => {
 
     const results = []
 
-    for (const content of assignedContents as AssignedContentWithDetails[]) {
-      const { profile, slot } = content
+    for (const content of assignedContents as any[]) {
+      const profile = content.profile
 
       // Double-check: skip if already locked or uploaded
       if (content.is_locked || content.status === 'uploaded') {
@@ -91,10 +92,23 @@ Deno.serve(async (req) => {
         continue
       }
 
-      // Skip if profile or slot not found
-      if (!profile || !slot) {
-        console.log(`Skipping content ${content.id} - missing profile or slot`)
+      // Skip if profile not found
+      if (!profile) {
+        console.log(`Skipping content ${content.id} - missing profile`)
         continue
+      }
+
+      // Fetch slot info separately if needed (for platform info)
+      let slotPlatform = profile.platform // Default to profile platform
+      if (content.scheduled_slot_id) {
+        const { data: slot } = await supabase
+          .from('schedule_slots')
+          .select('platform')
+          .eq('id', content.scheduled_slot_id)
+          .single()
+        if (slot) {
+          slotPlatform = slot.platform
+        }
       }
 
       console.log(`Processing content: ${content.id} for profile: ${profile.name}`)
@@ -103,7 +117,7 @@ Deno.serve(async (req) => {
         // Prepare data for webhook
         const webhookData = new FormData()
         webhookData.append('data', 'upload')
-        webhookData.append('platform', JSON.stringify([slot.platform]))
+        webhookData.append('platform', JSON.stringify([slotPlatform]))
         webhookData.append('title', content.caption || content.file_name || '')
         webhookData.append('user', profile.uploadpost_username || profile.name)
 

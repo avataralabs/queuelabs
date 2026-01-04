@@ -41,6 +41,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   const [draggedItem, setDraggedItem] = useState<typeof contents[0] | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<{ date: Date; hour: number } | null>(null);
   const [lastDroppedId, setLastDroppedId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   
   // Filter slots by profileId AND platform
   const profileSlots = allSlots.filter(s => 
@@ -109,7 +110,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   };
   
   const handleSlotClick = (date: Date, hour: number) => {
-    if (draggedItem) return; // Don't open dialog while dragging
+    if (isDragging || draggedItem) return; // Don't open dialog while dragging
     
     const slotContents = getContentsForSlot(date, hour);
     const hasSlot = hasSlotAtHour(hour, date);
@@ -174,6 +175,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   
   // Drag and Drop handlers
   const handleDragStart = (e: DragEvent, content: typeof contents[0]) => {
+    setIsDragging(true);
     setDraggedItem(content);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', content.id);
@@ -197,6 +199,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   };
   
   const handleDragEnd = () => {
+    setIsDragging(false);
     setDraggedItem(null);
     setDragOverSlot(null);
   };
@@ -361,6 +364,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                           <div 
                             key={content.id}
                             draggable={!isPast}
+                            onClick={(e) => e.stopPropagation()}
                             onDragStart={(e) => {
                               e.stopPropagation();
                               handleDragStart(e, content);

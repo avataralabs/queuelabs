@@ -22,13 +22,16 @@ export type Database = {
           file_size: number | null
           file_url: string | null
           id: string
+          is_locked: boolean | null
           removed_at: string | null
           removed_from_profile_id: string | null
           scheduled_at: string | null
           scheduled_slot_id: string | null
           status: string
+          upload_attempted_at: string | null
           uploaded_at: string | null
           user_id: string
+          webhook_response: Json | null
         }
         Insert: {
           assigned_profile_id?: string | null
@@ -37,13 +40,16 @@ export type Database = {
           file_size?: number | null
           file_url?: string | null
           id?: string
+          is_locked?: boolean | null
           removed_at?: string | null
           removed_from_profile_id?: string | null
           scheduled_at?: string | null
           scheduled_slot_id?: string | null
           status?: string
+          upload_attempted_at?: string | null
           uploaded_at?: string | null
           user_id: string
+          webhook_response?: Json | null
         }
         Update: {
           assigned_profile_id?: string | null
@@ -52,13 +58,16 @@ export type Database = {
           file_size?: number | null
           file_url?: string | null
           id?: string
+          is_locked?: boolean | null
           removed_at?: string | null
           removed_from_profile_id?: string | null
           scheduled_at?: string | null
           scheduled_slot_id?: string | null
           status?: string
+          upload_attempted_at?: string | null
           uploaded_at?: string | null
           user_id?: string
+          webhook_response?: Json | null
         }
         Relationships: [
           {

@@ -11,7 +11,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { format, isToday, isBefore } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { FileVideo, Calendar, Clock, Trash2, RotateCcw, GripVertical } from 'lucide-react';
+import { FileVideo, Calendar, Clock, Trash2, RotateCcw, GripVertical, Lock, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TimelineGraphProps {
@@ -52,11 +52,11 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
     s.is_active
   );
   
-  // Get assigned/scheduled contents for this profile and platform
+  // Get assigned/scheduled/uploaded contents for this profile and platform
   const assignedContents = contents.filter(c => 
     c.assigned_profile_id === profileId &&
     c.scheduled_slot_id &&
-    (c.status === 'assigned' || c.status === 'scheduled')
+    (c.status === 'assigned' || c.status === 'scheduled' || c.status === 'uploaded')
   );
   
   // Get pending contents for scheduling
@@ -373,53 +373,68 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                         "h-full space-y-1 overflow-hidden",
                         slotContents.length > 2 && "max-h-[80px] overflow-y-auto scrollbar-thin"
                       )}>
-                        {slotContents.map((content) => (
-                          <div 
-                            key={content.id}
-                            draggable={!isPast}
-                            title="Double-click to manage, drag to move"
-                            onMouseDown={(e) => {
-                              if (isPast) return;
-                              e.stopPropagation();
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Only stop if it was a drag
-                              if (isDragIntent) {
-                                setIsDragIntent(false);
-                              }
-                            }}
-                            onDoubleClick={(e) => {
-                              if (!isDragIntent) {
-                                handleContentDoubleClick(e, date, hour, slotContents);
-                              }
-                            }}
-                            onDragStart={(e) => handleDragStart(e, content)}
-                            onDrag={handleDrag}
-                            onDragEnd={handleDragEnd}
-                            style={{ 
-                              cursor: isPast ? 'default' : isDragging && draggedItem?.id === content.id ? 'grabbing' : 'grab',
-                              WebkitUserSelect: 'none',
-                              userSelect: 'none'
-                            }}
-                            className={cn(
-                              "rounded-md p-1.5 text-xs transition-all duration-200 overflow-hidden touch-none",
-                              "bg-primary/20 border border-primary/30 hover:bg-primary/30",
-                              draggedItem?.id === content.id && "opacity-30 scale-90 ring-2 ring-dashed ring-primary/50 bg-primary/10",
-                              lastDroppedId === content.id && "animate-pulse ring-2 ring-green-500 bg-green-100 dark:bg-green-900/30"
-                            )}
-                          >
-                            <div className="flex items-center gap-1">
-                              <GripVertical className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                              <p className="font-medium truncate flex-1" title={content.file_name}>
-                                {content.file_name.length > 10 
-                                  ? `${content.file_name.slice(0, 10)}...` 
-                                  : content.file_name
+                        {slotContents.map((content) => {
+                          const isLocked = content.is_locked || content.status === 'uploaded';
+                          const isUploaded = content.status === 'uploaded';
+                          const canDrag = !isPast && !isLocked;
+                          
+                          return (
+                            <div 
+                              key={content.id}
+                              draggable={canDrag}
+                              title={isLocked ? (isUploaded ? 'Uploaded - cannot be modified' : 'Locked - cannot be modified') : 'Double-click to manage, drag to move'}
+                              onMouseDown={(e) => {
+                                if (isPast || isLocked) return;
+                                e.stopPropagation();
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isDragIntent) {
+                                  setIsDragIntent(false);
                                 }
-                              </p>
+                              }}
+                              onDoubleClick={(e) => {
+                                if (!isDragIntent && !isLocked) {
+                                  handleContentDoubleClick(e, date, hour, slotContents);
+                                }
+                              }}
+                              onDragStart={(e) => canDrag && handleDragStart(e, content)}
+                              onDrag={canDrag ? handleDrag : undefined}
+                              onDragEnd={canDrag ? handleDragEnd : undefined}
+                              style={{ 
+                                cursor: isLocked ? 'not-allowed' : isPast ? 'default' : isDragging && draggedItem?.id === content.id ? 'grabbing' : 'grab',
+                                WebkitUserSelect: 'none',
+                                userSelect: 'none'
+                              }}
+                              className={cn(
+                                "rounded-md p-1.5 text-xs transition-all duration-200 overflow-hidden touch-none",
+                                isUploaded 
+                                  ? "bg-green-500/20 border border-green-500/40" 
+                                  : isLocked 
+                                    ? "bg-muted border border-muted-foreground/30 opacity-70" 
+                                    : "bg-primary/20 border border-primary/30 hover:bg-primary/30",
+                                draggedItem?.id === content.id && "opacity-30 scale-90 ring-2 ring-dashed ring-primary/50 bg-primary/10",
+                                lastDroppedId === content.id && "animate-pulse ring-2 ring-green-500 bg-green-100 dark:bg-green-900/30"
+                              )}
+                            >
+                              <div className="flex items-center gap-1">
+                                {isUploaded ? (
+                                  <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />
+                                ) : isLocked ? (
+                                  <Lock className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                                ) : (
+                                  <GripVertical className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                                )}
+                                <p className="font-medium truncate flex-1" title={content.file_name}>
+                                  {content.file_name.length > 10 
+                                    ? `${content.file_name.slice(0, 10)}...` 
+                                    : content.file_name
+                                  }
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                         {/* Badge showing count if more than 1 */}
                         {slotContents.length > 1 && (
                           <div className="text-[10px] text-center text-muted-foreground">

@@ -44,7 +44,7 @@ export default function ContentPage() {
   
   // Use Supabase hooks for database
   const { profiles, isLoading: profilesLoading } = useProfiles();
-  const { contents, isLoading: contentsLoading, addContent, updateContent, deleteContent } = useContents();
+  const { contents, isLoading: contentsLoading, addContent, updateContent, deleteContent, uploadFile } = useContents();
   const { slots, isLoading: slotsLoading } = useScheduleSlots();
   
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -53,6 +53,7 @@ export default function ContentPage() {
   const [newContent, setNewContent] = useState({ fileName: '', caption: '' });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState('pending');
   
@@ -152,24 +153,41 @@ export default function ContentPage() {
     }
   };
 
-  const handleUpload = () => {
-    if (!newContent.fileName.trim()) return;
+  const handleUpload = async () => {
+    if (!newContent.fileName.trim() || !selectedFile) return;
     
-    addContent.mutate({
-      file_name: newContent.fileName,
-      caption: newContent.caption || null,
-      file_size: selectedFile?.size || 0,
-      file_url: null,
-      assigned_profile_id: null,
-      scheduled_at: null,
-      scheduled_slot_id: null,
-      status: 'pending',
-      removed_at: null,
-      removed_from_profile_id: null
-    });
+    setIsUploading(true);
     
-    clearPreview();
-    toast.success('Content added to queue');
+    try {
+      // Upload file to storage first
+      const fileUrl = await uploadFile(selectedFile);
+      if (!fileUrl) {
+        toast.error('Failed to upload file to storage');
+        return;
+      }
+      
+      // Save metadata with valid file_url
+      addContent.mutate({
+        file_name: newContent.fileName,
+        caption: newContent.caption || null,
+        file_size: selectedFile.size,
+        file_url: fileUrl,
+        assigned_profile_id: null,
+        scheduled_at: null,
+        scheduled_slot_id: null,
+        status: 'pending',
+        removed_at: null,
+        removed_from_profile_id: null
+      });
+      
+      clearPreview();
+      toast.success('Content uploaded successfully');
+    } catch (error) {
+      toast.error('Failed to upload content');
+      console.error('Upload error:', error);
+    } finally {
+      setIsUploading(false);
+    }
   };
   
   const openAssignDialog = (contentId: string, fromTrash: boolean = false) => {
@@ -413,10 +431,19 @@ export default function ContentPage() {
                 <Button 
                   onClick={handleUpload} 
                   variant="default"
-                  disabled={!newContent.caption.trim()}
+                  disabled={!newContent.caption.trim() || isUploading}
                 >
-                  <Upload className="w-4 h-4" />
-                  Add to Queue
+                  {isUploading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      Add to Queue
+                    </>
+                  )}
                 </Button>
                 <Button variant="outline" onClick={clearPreview}>
                   Cancel

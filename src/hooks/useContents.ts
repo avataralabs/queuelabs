@@ -135,11 +135,8 @@ export function useContents(status?: ContentStatus | ContentStatus[]) {
       return null;
     }
     
-    const { data: { publicUrl } } = supabase.storage
-      .from('content-files')
-      .getPublicUrl(filePath);
-    
-    return publicUrl;
+    // Return file path (not public URL) for private bucket access
+    return filePath;
   };
 
   return {

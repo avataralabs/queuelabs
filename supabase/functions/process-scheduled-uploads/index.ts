@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
               console.error('Error downloading file from storage:', downloadError)
             } else if (fileData) {
               const fileName = content.file_name || 'content_file'
-              webhookData.append('file', fileData, fileName)
+              webhookData.append('video', fileData, fileName)
               console.log(`File attached: ${fileName}, size: ${fileData.size} bytes`)
             }
           } catch (fileError) {

@@ -5,7 +5,13 @@ import { useToast } from './use-toast';
 
 export type UploadStatus = 'success' | 'failed';
 
-export interface UploadHistory {
+export interface ConnectedAccount {
+  platform: string;
+  username: string;
+  profile_picture?: string;
+}
+
+export interface UploadHistoryWithDetails {
   id: string;
   content_id: string | null;
   profile_id: string | null;
@@ -13,6 +19,12 @@ export interface UploadHistory {
   status: UploadStatus;
   error_message: string | null;
   user_id: string;
+  contents: { file_name: string; file_url: string | null } | null;
+  profiles: { 
+    name: string; 
+    platform: string; 
+    connected_accounts: ConnectedAccount[] | null 
+  } | null;
 }
 
 export function useUploadHistory() {
@@ -26,17 +38,21 @@ export function useUploadHistory() {
       if (!user) return [];
       const { data, error } = await supabase
         .from('upload_history')
-        .select('*')
+        .select(`
+          *,
+          contents:content_id (file_name, file_url),
+          profiles:profile_id (name, platform, connected_accounts)
+        `)
         .order('uploaded_at', { ascending: false });
       
       if (error) throw error;
-      return data as UploadHistory[];
+      return data as unknown as UploadHistoryWithDetails[];
     },
     enabled: !!user
   });
 
   const addHistory = useMutation({
-    mutationFn: async (history: Omit<UploadHistory, 'id' | 'user_id' | 'uploaded_at'>) => {
+    mutationFn: async (history: { content_id: string | null; profile_id: string | null; status: UploadStatus; error_message: string | null }) => {
       if (!user) throw new Error('Not authenticated');
       const { data, error } = await supabase
         .from('upload_history')

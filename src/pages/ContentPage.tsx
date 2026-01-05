@@ -50,7 +50,7 @@ export default function ContentPage() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null);
   const [isFromTrash, setIsFromTrash] = useState(false);
-  const [newContent, setNewContent] = useState({ fileName: '', caption: '' });
+  const [newContent, setNewContent] = useState({ fileName: '', caption: '', description: '' });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -145,7 +145,7 @@ export default function ContentPage() {
     }
     setVideoPreviewUrl(null);
     setSelectedFile(null);
-    setNewContent({ fileName: '', caption: '' });
+    setNewContent({ fileName: '', caption: '', description: '' });
     
     // Reset file input so the same file can be uploaded again
     if (fileInputRef.current) {
@@ -170,6 +170,7 @@ export default function ContentPage() {
       addContent.mutate({
         file_name: newContent.fileName,
         caption: newContent.caption || null,
+        description: newContent.description || null,
         file_size: selectedFile.size,
         file_url: fileUrl,
         assigned_profile_id: null,
@@ -295,6 +296,7 @@ export default function ContentPage() {
         addContent.mutate({
           file_name: originalContent.file_name,
           caption: originalContent.caption,
+          description: originalContent.description,
           file_size: originalContent.file_size,
           file_url: originalContent.file_url,
           assigned_profile_id: slotData.profileId,
@@ -423,6 +425,17 @@ export default function ContentPage() {
                   rows={3}
                   value={newContent.caption}
                   onChange={(e) => setNewContent(prev => ({ ...prev, caption: e.target.value }))}
+                  className="resize-none max-w-2xl mx-auto"
+                />
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium mb-2 block">Description</label>
+                <Textarea
+                  placeholder="Write your description here..."
+                  rows={3}
+                  value={newContent.description}
+                  onChange={(e) => setNewContent(prev => ({ ...prev, description: e.target.value }))}
                   className="resize-none max-w-2xl mx-auto"
                 />
               </div>

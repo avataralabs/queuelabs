@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           assigned_profile_id: string | null
           caption: string | null
+          description: string | null
           file_name: string
           file_size: number | null
           file_url: string | null
@@ -36,6 +37,7 @@ export type Database = {
         Insert: {
           assigned_profile_id?: string | null
           caption?: string | null
+          description?: string | null
           file_name: string
           file_size?: number | null
           file_url?: string | null
@@ -54,6 +56,7 @@ export type Database = {
         Update: {
           assigned_profile_id?: string | null
           caption?: string | null
+          description?: string | null
           file_name?: string
           file_size?: number | null
           file_url?: string | null

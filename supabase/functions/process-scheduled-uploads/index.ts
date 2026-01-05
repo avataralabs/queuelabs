@@ -9,6 +9,7 @@ interface AssignedContentWithDetails {
   id: string
   file_name: string
   caption: string | null
+  description: string | null
   file_url: string | null
   status: string
   is_locked: boolean
@@ -119,6 +120,7 @@ Deno.serve(async (req) => {
         webhookData.append('data', 'upload')
         webhookData.append('platform', slotPlatform || '')
         webhookData.append('title', content.caption || content.file_name || '')
+        webhookData.append('description', content.description || '')
         webhookData.append('user', profile.uploadpost_username || profile.name)
 
         // If there's a file path, download from private storage bucket

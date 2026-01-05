@@ -9,6 +9,7 @@ export interface Content {
   id: string;
   file_name: string;
   caption: string | null;
+  description: string | null;
   file_size: number;
   file_url: string | null;
   uploaded_at: string;
@@ -61,6 +62,7 @@ export function useContents(status?: ContentStatus | ContentStatus[]) {
         .insert({ 
           file_name: content.file_name,
           caption: content.caption ?? null,
+          description: content.description ?? null,
           file_size: content.file_size ?? 0,
           file_url: content.file_url ?? null,
           assigned_profile_id: content.assigned_profile_id ?? null,

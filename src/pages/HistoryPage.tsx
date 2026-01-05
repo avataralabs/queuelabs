@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import { useAppStore } from '@/stores/appStore';
+import { useUploadHistory, UploadHistoryWithDetails, ConnectedAccount } from '@/hooks/useUploadHistory';
+import { useProfiles } from '@/hooks/useProfiles';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { PlatformBadge } from '@/components/common/PlatformBadge';
+import { PlatformIcon } from '@/components/common/PlatformIcon';
 import { 
   Select,
   SelectContent,
@@ -10,29 +11,27 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { format } from 'date-fns';
-import { History, FileVideo, CheckCircle, XCircle, Filter } from 'lucide-react';
+import { History, FileVideo, CheckCircle, XCircle, Filter, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { Platform } from '@/hooks/useProfiles';
 
 export default function HistoryPage() {
-  const { uploadHistory, profiles, contents } = useAppStore();
+  const { history, isLoading } = useUploadHistory();
+  const { profiles } = useProfiles();
   const [filterProfileId, setFilterProfileId] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   
   const filteredHistory = useMemo(() => {
-    return uploadHistory
-      .filter(h => filterProfileId === 'all' || h.profileId === filterProfileId)
-      .filter(h => filterStatus === 'all' || h.status === filterStatus)
-      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-  }, [uploadHistory, filterProfileId, filterStatus]);
-  
-  const getProfileById = (id: string) => profiles.find(p => p.id === id);
-  const getContentById = (id: string) => contents.find(c => c.id === id);
+    return history
+      .filter(h => filterProfileId === 'all' || h.profile_id === filterProfileId)
+      .filter(h => filterStatus === 'all' || h.status === filterStatus);
+  }, [history, filterProfileId, filterStatus]);
   
   const stats = useMemo(() => ({
-    total: uploadHistory.length,
-    success: uploadHistory.filter(h => h.status === 'success').length,
-    failed: uploadHistory.filter(h => h.status === 'failed').length,
-  }), [uploadHistory]);
+    total: history.length,
+    success: history.filter(h => h.status === 'success').length,
+    failed: history.filter(h => h.status === 'failed').length,
+  }), [history]);
   
   return (
     <MainLayout>
@@ -78,7 +77,7 @@ export default function HistoryPage() {
                 {profiles.map(profile => (
                   <SelectItem key={profile.id} value={profile.id}>
                     <div className="flex items-center gap-2">
-                      <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />
+                      <PlatformIcon platform={profile.platform as Platform} size="sm" />
                       {profile.name}
                     </div>
                   </SelectItem>
@@ -111,7 +110,11 @@ export default function HistoryPage() {
         
         {/* History List */}
         <div className="glass rounded-xl border border-border p-6">
-          {filteredHistory.length === 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredHistory.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <History className="w-16 h-16 mx-auto mb-4 opacity-50" />
               <h2 className="text-xl font-semibold mb-2">No Upload History</h2>
@@ -120,8 +123,11 @@ export default function HistoryPage() {
           ) : (
             <div className="space-y-3">
               {filteredHistory.map(entry => {
-                const profile = getProfileById(entry.profileId);
-                const content = getContentById(entry.contentId);
+                const profile = entry.profiles;
+                const content = entry.contents;
+                const connectedAccount = profile?.connected_accounts?.find(
+                  (acc: ConnectedAccount) => acc.platform === profile.platform
+                );
                 
                 return (
                   <div 
@@ -129,29 +135,42 @@ export default function HistoryPage() {
                     className="flex items-center justify-between p-4 rounded-lg bg-secondary/20 hover:bg-secondary/30 transition-colors"
                   >
                     <div className="flex items-center gap-4">
-                      <div className={cn(
-                        "w-10 h-10 rounded-lg flex items-center justify-center",
-                        entry.status === 'success' ? "bg-success/10" : "bg-destructive/10"
-                      )}>
-                        {entry.status === 'success' 
-                          ? <CheckCircle className="w-5 h-5 text-success" />
-                          : <XCircle className="w-5 h-5 text-destructive" />
-                        }
-                      </div>
+                      {connectedAccount?.profile_picture ? (
+                        <img 
+                          src={connectedAccount.profile_picture} 
+                          alt={connectedAccount.username}
+                          className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div className={cn(
+                          "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
+                          entry.status === 'success' ? "bg-success/10" : "bg-destructive/10"
+                        )}>
+                          {profile ? (
+                            <PlatformIcon platform={profile.platform as Platform} className="w-5 h-5" />
+                          ) : entry.status === 'success' ? (
+                            <CheckCircle className="w-5 h-5 text-success" />
+                          ) : (
+                            <XCircle className="w-5 h-5 text-destructive" />
+                          )}
+                        </div>
+                      )}
                       
                       <div>
-                        <div className="flex items-center gap-2">
-                          <FileVideo className="w-4 h-4 text-muted-foreground" />
-                          <span className="font-medium">
-                            {content?.fileName || 'Unknown content'}
-                          </span>
-                        </div>
+                        <p className="font-medium">
+                          {content?.file_name || 'Unknown content'}
+                        </p>
                         <div className="flex items-center gap-2 mt-1">
                           {profile && (
-                            <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />
+                            <>
+                              <PlatformIcon platform={profile.platform as Platform} className="w-4 h-4 text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground">
+                                @{connectedAccount?.username || profile.name}
+                              </span>
+                            </>
                           )}
                           <span className="text-sm text-muted-foreground">
-                            {profile?.name || 'Unknown profile'}
+                            • {format(new Date(entry.uploaded_at), 'MMM d, HH:mm')}
                           </span>
                         </div>
                       </div>
@@ -166,11 +185,10 @@ export default function HistoryPage() {
                       )}>
                         {entry.status === 'success' ? 'Uploaded' : 'Failed'}
                       </span>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {format(new Date(entry.uploadedAt), 'MMM d, HH:mm')}
-                      </p>
-                      {entry.errorMessage && (
-                        <p className="text-xs text-destructive mt-1">{entry.errorMessage}</p>
+                      {entry.error_message && (
+                        <p className="text-xs text-destructive mt-1 max-w-[200px] truncate" title={entry.error_message}>
+                          {entry.error_message}
+                        </p>
                       )}
                     </div>
                   </div>

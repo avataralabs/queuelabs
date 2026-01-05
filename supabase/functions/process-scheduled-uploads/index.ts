@@ -121,18 +121,22 @@ Deno.serve(async (req) => {
         webhookData.append('title', content.caption || content.file_name || '')
         webhookData.append('user', profile.uploadpost_username || profile.name)
 
-        // If there's a file URL, try to fetch and attach the binary
+        // If there's a file path, download from private storage bucket
         if (content.file_url) {
           try {
-            console.log(`Fetching file from: ${content.file_url}`)
-            const fileResponse = await fetch(content.file_url)
-            if (fileResponse.ok) {
-              const fileBlob = await fileResponse.blob()
+            console.log(`Downloading file from storage: ${content.file_url}`)
+            
+            // Use Supabase Storage API to download from private bucket
+            const { data: fileData, error: downloadError } = await supabase.storage
+              .from('content-files')
+              .download(content.file_url)
+            
+            if (downloadError) {
+              console.error('Error downloading file from storage:', downloadError)
+            } else if (fileData) {
               const fileName = content.file_name || 'content_file'
-              webhookData.append('file', fileBlob, fileName)
-              console.log(`File attached: ${fileName}, size: ${fileBlob.size} bytes`)
-            } else {
-              console.warn(`Failed to fetch file: ${fileResponse.status}`)
+              webhookData.append('file', fileData, fileName)
+              console.log(`File attached: ${fileName}, size: ${fileData.size} bytes`)
             }
           } catch (fileError) {
             console.error('Error fetching file:', fileError)

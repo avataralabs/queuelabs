@@ -675,6 +675,10 @@ export default function ContentPage() {
                     const profile = content.removed_from_profile_id 
                       ? getProfileById(content.removed_from_profile_id) 
                       : null;
+                    const connectedAccount = profile?.connected_accounts?.find(
+                      (acc: ConnectedAccount) => acc.platform === profile.platform
+                    ) as ConnectedAccount | undefined;
+                    
                     return (
                       <div 
                         key={content.id}
@@ -682,21 +686,34 @@ export default function ContentPage() {
                       >
                         <div className="flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <FileVideo className="w-5 h-5 text-orange-600 flex-shrink-0" />
+                            {connectedAccount?.profile_picture ? (
+                              <img 
+                                src={connectedAccount.profile_picture} 
+                                alt={connectedAccount.username}
+                                className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                                {profile ? (
+                                  <PlatformIcon platform={profile.platform as Platform} className="w-5 h-5" />
+                                ) : (
+                                  <FileVideo className="w-5 h-5 text-orange-600" />
+                                )}
+                              </div>
+                            )}
                             <div className="min-w-0 flex-1">
                               <p className="font-medium truncate" title={content.file_name}>
                                 {content.file_name}
                               </p>
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-2 mt-1">
                                 {profile && (
                                   <>
-                                    <span>Removed from:</span>
-                                    <PlatformBadge platform={profile.platform as Platform} size="sm" showLabel={false} />
-                                    <span>{profile.name}</span>
+                                    <PlatformIcon platform={profile.platform as Platform} className="w-4 h-4 text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground">@{connectedAccount?.username || profile.name}</span>
                                   </>
                                 )}
                                 {content.removed_at && (
-                                  <span className="ml-2">
+                                  <span className="text-sm text-muted-foreground">
                                     • {format(new Date(content.removed_at), 'MMM d, HH:mm')}
                                   </span>
                                 )}

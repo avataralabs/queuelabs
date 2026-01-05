@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
         // Prepare data for webhook
         const webhookData = new FormData()
         webhookData.append('data', 'upload')
-        webhookData.append('platform', JSON.stringify([slotPlatform]))
+        webhookData.append('platform', slotPlatform || '')
         webhookData.append('title', content.caption || content.file_name || '')
         webhookData.append('user', profile.uploadpost_username || profile.name)
 
@@ -163,12 +163,16 @@ Deno.serve(async (req) => {
         console.log(`Webhook response body:`, responseJson)
 
         if (webhookResponse.ok) {
-          // Success - update content status to uploaded, lock it
+          // Success - move content to trash
           const { error: updateError } = await supabase
             .from('contents')
             .update({
-              status: 'uploaded',
-              is_locked: true,
+              status: 'removed',
+              removed_at: now.toISOString(),
+              removed_from_profile_id: profile.id,
+              scheduled_slot_id: null,
+              scheduled_at: null,
+              is_locked: false,
               upload_attempted_at: now.toISOString(),
               webhook_response: responseJson
             })
@@ -200,7 +204,7 @@ Deno.serve(async (req) => {
             message: 'Upload successful'
           })
 
-          console.log(`✅ Content ${content.id} uploaded successfully`)
+          console.log(`✅ Content ${content.id} uploaded successfully and moved to trash`)
 
         } else {
           // Failed - log error but don't lock

@@ -1,34 +1,22 @@
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { MainLayout } from '@/components/layout/MainLayout';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { PlatformBadge } from '@/components/common/PlatformBadge';
-import { PlatformIcon } from '@/components/common/PlatformIcon';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useProfiles, Platform, ConnectedAccount } from '@/hooks/useProfiles';
-import { useContents } from '@/hooks/useContents';
-import { useScheduleSlots } from '@/hooks/useScheduleSlots';
+import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { MainLayout } from "@/components/layout/MainLayout";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { PlatformBadge } from "@/components/common/PlatformBadge";
+import { PlatformIcon } from "@/components/common/PlatformIcon";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useProfiles, Platform, ConnectedAccount } from "@/hooks/useProfiles";
+import { useContents } from "@/hooks/useContents";
+import { useScheduleSlots } from "@/hooks/useScheduleSlots";
 
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle,
-  DialogFooter
-} from '@/components/ui/dialog';
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, AlertCircle, Check } from 'lucide-react';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, AlertCircle, Check } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface SelectedSlot {
   profileId: string;
@@ -41,83 +29,79 @@ interface SelectedSlot {
 
 export default function ContentPage() {
   const navigate = useNavigate();
-  
+
   // Use Supabase hooks for database
   const { profiles, isLoading: profilesLoading } = useProfiles();
   const { contents, isLoading: contentsLoading, addContent, updateContent, deleteContent, uploadFile } = useContents();
   const { slots, isLoading: slotsLoading } = useScheduleSlots();
-  
+
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null);
   const [isFromTrash, setIsFromTrash] = useState(false);
-  const [newContent, setNewContent] = useState({ fileName: '', caption: '', description: '' });
+  const [newContent, setNewContent] = useState({ fileName: "", caption: "", description: "" });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab] = useState('pending');
-  
+  const [activeTab, setActiveTab] = useState("pending");
+
   // Multi-select state
   const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
-  
+
   // Filter states for assign dialog
-  const [dialogProfileFilter, setDialogProfileFilter] = useState<string>('all');
-  const [dialogPlatformFilter, setDialogPlatformFilter] = useState<string>('all');
-  
-  const pendingContents = contents.filter(c => c.status === 'pending');
-  const assignedContents = contents.filter(c => c.status === 'assigned' || c.status === 'scheduled');
-  const removedContents = contents.filter(c => c.status === 'removed');
-  
-  const getProfileById = (id?: string | null) => profiles.find(p => p.id === id);
-  
+  const [dialogProfileFilter, setDialogProfileFilter] = useState<string>("all");
+  const [dialogPlatformFilter, setDialogPlatformFilter] = useState<string>("all");
+
+  const pendingContents = contents.filter((c) => c.status === "pending");
+  const assignedContents = contents.filter((c) => c.status === "assigned" || c.status === "scheduled");
+  const removedContents = contents.filter((c) => c.status === "removed");
+
+  const getProfileById = (id?: string | null) => profiles.find((p) => p.id === id);
+
   // Get all active slots for a profile+platform combination
   const getSlotsByProfilePlatform = (profileId: string, platform: string) => {
-    return slots.filter(s => 
-      s.profile_id === profileId && 
-      s.platform === platform && 
-      s.is_active
-    );
+    return slots.filter((s) => s.profile_id === profileId && s.platform === platform && s.is_active);
   };
-  
+
   // Get all connected accounts across all profiles with their parent profile info and slots
   const getAllConnectedAccountsWithSlots = () => {
     const accountsWithSlots: Array<{
-      profile: typeof profiles[0];
+      profile: (typeof profiles)[0];
       account: ConnectedAccount;
-      slot: typeof slots[0];
+      slot: (typeof slots)[0];
     }> = [];
-    
+
     const accountsWithoutSlots: Array<{
-      profile: typeof profiles[0];
+      profile: (typeof profiles)[0];
       account: ConnectedAccount;
     }> = [];
-    
-    profiles.forEach(profile => {
-      const connectedAccounts = profile.connected_accounts as ConnectedAccount[] || [];
-      connectedAccounts.forEach(account => {
+
+    profiles.forEach((profile) => {
+      const connectedAccounts = (profile.connected_accounts as ConnectedAccount[]) || [];
+      connectedAccounts.forEach((account) => {
         const accountSlots = getSlotsByProfilePlatform(profile.id, account.platform);
-        
+
         if (accountSlots.length > 0) {
           // Add each slot as a separate entry
-          accountSlots.forEach(slot => {
+          accountSlots.forEach((slot) => {
             accountsWithSlots.push({
               profile,
               account,
-              slot
+              slot,
             });
           });
         } else {
           accountsWithoutSlots.push({
             profile,
-            account
+            account,
           });
         }
       });
     });
-    
+
     return { accountsWithSlots, accountsWithoutSlots };
   };
-  
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -125,10 +109,10 @@ export default function ContentPage() {
       if (videoPreviewUrl) {
         URL.revokeObjectURL(videoPreviewUrl);
       }
-      
+
       setSelectedFile(file);
-      setNewContent(prev => ({ ...prev, fileName: file.name }));
-      
+      setNewContent((prev) => ({ ...prev, fileName: file.name }));
+
       // Generate preview URL for video
       const url = URL.createObjectURL(file);
       setVideoPreviewUrl(url);
@@ -145,27 +129,27 @@ export default function ContentPage() {
     }
     setVideoPreviewUrl(null);
     setSelectedFile(null);
-    setNewContent({ fileName: '', caption: '', description: '' });
-    
+    setNewContent({ fileName: "", caption: "", description: "" });
+
     // Reset file input so the same file can be uploaded again
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
   };
 
   const handleUpload = async () => {
     if (!newContent.fileName.trim() || !selectedFile) return;
-    
+
     setIsUploading(true);
-    
+
     try {
       // Upload file to storage first
       const fileUrl = await uploadFile(selectedFile);
       if (!fileUrl) {
-        toast.error('Failed to upload file to storage');
+        toast.error("Failed to upload file to storage");
         return;
       }
-      
+
       // Save metadata with valid file_url
       addContent.mutate({
         file_name: newContent.fileName,
@@ -176,110 +160,110 @@ export default function ContentPage() {
         assigned_profile_id: null,
         scheduled_at: null,
         scheduled_slot_id: null,
-        status: 'pending',
+        status: "pending",
         removed_at: null,
-        removed_from_profile_id: null
+        removed_from_profile_id: null,
       });
-      
+
       clearPreview();
-      toast.success('Content uploaded successfully');
+      toast.success("Content uploaded successfully");
     } catch (error) {
-      toast.error('Failed to upload content');
-      console.error('Upload error:', error);
+      toast.error("Failed to upload content");
+      console.error("Upload error:", error);
     } finally {
       setIsUploading(false);
     }
   };
-  
+
   const openAssignDialog = (contentId: string, fromTrash: boolean = false) => {
     setSelectedContentId(contentId);
     setIsFromTrash(fromTrash);
     setSelectedSlots([]); // Reset selections
-    setDialogProfileFilter('all'); // Reset filters
-    setDialogPlatformFilter('all');
+    setDialogProfileFilter("all"); // Reset filters
+    setDialogPlatformFilter("all");
     setAssignDialogOpen(true);
   };
-  
+
   const toggleSlotSelection = (slot: SelectedSlot) => {
-    setSelectedSlots(prev => {
-      const exists = prev.find(s => s.slotId === slot.slotId);
+    setSelectedSlots((prev) => {
+      const exists = prev.find((s) => s.slotId === slot.slotId);
       if (exists) {
-        return prev.filter(s => s.slotId !== slot.slotId);
+        return prev.filter((s) => s.slotId !== slot.slotId);
       } else {
         return [...prev, slot];
       }
     });
   };
-  
+
   const isSlotSelected = (slotId: string) => {
-    return selectedSlots.some(s => s.slotId === slotId);
+    return selectedSlots.some((s) => s.slotId === slotId);
   };
-  
+
   // Find next available date for a specific slot (for auto-assign)
   const findNextAvailableDateForSlot = (slotId: string): Date => {
     const now = new Date();
-    const slot = slots.find(s => s.id === slotId);
+    const slot = slots.find((s) => s.id === slotId);
     if (!slot) return now;
-    
+
     // Start from today at midnight
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);
-    
+
     // Check if slot time has already passed today
     const todaySlotTime = new Date();
     todaySlotTime.setHours(slot.hour, slot.minute, 0, 0);
-    
+
     // If slot time already passed today, start from tomorrow
     if (now > todaySlotTime) {
       startDate.setDate(startDate.getDate() + 1);
     }
-    
+
     // Get all dates that already have content assigned to this slot
     const occupiedDates = contents
-      .filter(c => c.scheduled_slot_id === slotId && (c.status === 'assigned' || c.status === 'scheduled'))
-      .map(c => {
+      .filter((c) => c.scheduled_slot_id === slotId && (c.status === "assigned" || c.status === "scheduled"))
+      .map((c) => {
         if (!c.scheduled_at) return null;
         const d = new Date(c.scheduled_at);
         return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       })
       .filter(Boolean);
-    
+
     // Find the first available date starting from startDate
     for (let i = 0; i < 365; i++) {
       const checkDate = new Date(startDate);
       checkDate.setDate(checkDate.getDate() + i);
-      
+
       // For weekly slots, check if this day of week is active
-      if (slot.type === 'weekly' && slot.week_days) {
+      if (slot.type === "weekly" && slot.week_days) {
         if (!slot.week_days.includes(checkDate.getDay())) {
           continue;
         }
       }
-      
+
       const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
       if (!occupiedDates.includes(dateKey)) {
         return checkDate;
       }
     }
-    
+
     return startDate; // fallback
   };
-  
+
   const handleMultiAssign = async () => {
     if (!selectedContentId || selectedSlots.length === 0) return;
-    
-    const originalContent = contents.find(c => c.id === selectedContentId);
+
+    const originalContent = contents.find((c) => c.id === selectedContentId);
     if (!originalContent) return;
-    
+
     // Process each selected slot
     for (let i = 0; i < selectedSlots.length; i++) {
       const slotData = selectedSlots[i];
-      const slot = slots.find(s => s.id === slotData.slotId);
-      
+      const slot = slots.find((s) => s.id === slotData.slotId);
+
       // Find next available date for this slot
       const scheduledDate = findNextAvailableDateForSlot(slotData.slotId);
       scheduledDate.setHours(slot?.hour || 0, slot?.minute || 0, 0, 0);
-      
+
       if (i === 0) {
         // First slot: update original content
         updateContent.mutate({
@@ -287,9 +271,9 @@ export default function ContentPage() {
           assigned_profile_id: slotData.profileId,
           scheduled_slot_id: slotData.slotId,
           scheduled_at: scheduledDate.toISOString(),
-          status: 'assigned',
+          status: "assigned",
           removed_at: null,
-          removed_from_profile_id: null
+          removed_from_profile_id: null,
         });
       } else {
         // Additional slots: create duplicate content
@@ -302,150 +286,134 @@ export default function ContentPage() {
           assigned_profile_id: slotData.profileId,
           scheduled_slot_id: slotData.slotId,
           scheduled_at: scheduledDate.toISOString(),
-          status: 'assigned',
+          status: "assigned",
           removed_at: null,
-          removed_from_profile_id: null
+          removed_from_profile_id: null,
         });
       }
     }
-    
-    toast.success(`Content assigned to ${selectedSlots.length} slot${selectedSlots.length > 1 ? 's' : ''}`);
-    
+
+    toast.success(`Content assigned to ${selectedSlots.length} slot${selectedSlots.length > 1 ? "s" : ""}`);
+
     setAssignDialogOpen(false);
     setSelectedContentId(null);
     setSelectedSlots([]);
     setIsFromTrash(false);
   };
-  
-  const handleAssignedContentClick = (content: typeof assignedContents[0]) => {
+
+  const handleAssignedContentClick = (content: (typeof assignedContents)[0]) => {
     if (content.assigned_profile_id) {
-      const contentSlot = slots.find(s => s.id === content.scheduled_slot_id);
+      const contentSlot = slots.find((s) => s.id === content.scheduled_slot_id);
       const params = new URLSearchParams();
-      
-      params.set('profile', content.assigned_profile_id);
-      
+
+      params.set("profile", content.assigned_profile_id);
+
       if (contentSlot) {
-        params.set('platform', contentSlot.platform);
-        params.set('hour', String(contentSlot.hour));
+        params.set("platform", contentSlot.platform);
+        params.set("hour", String(contentSlot.hour));
       }
-      
+
       if (content.scheduled_at) {
-        params.set('date', content.scheduled_at.split('T')[0]);
+        params.set("date", content.scheduled_at.split("T")[0]);
       }
-      
-      params.set('contentId', content.id);
-      
+
+      params.set("contentId", content.id);
+
       navigate(`/schedule?${params.toString()}`);
     }
   };
-  
+
   const handleDeleteContent = (contentId: string) => {
     // Move to trash (set status to removed)
-    const content = contents.find(c => c.id === contentId);
+    const content = contents.find((c) => c.id === contentId);
     if (content) {
       updateContent.mutate({
         id: contentId,
-        status: 'removed',
+        status: "removed",
         removed_at: new Date().toISOString(),
-        removed_from_profile_id: content.assigned_profile_id
+        removed_from_profile_id: content.assigned_profile_id,
       });
-      toast.success('Content moved to trash');
+      toast.success("Content moved to trash");
     }
   };
-  
+
   const handlePermanentDelete = (contentId: string) => {
     deleteContent.mutate(contentId);
-    toast.success('Content permanently deleted');
+    toast.success("Content permanently deleted");
   };
 
   const isLoading = profilesLoading || contentsLoading || slotsLoading;
   const { accountsWithSlots, accountsWithoutSlots } = getAllConnectedAccountsWithSlots();
-  
+
   // Filter accounts based on dialog filters
   const filteredAccountsWithSlots = accountsWithSlots.filter(({ profile, account }) => {
-    const matchProfile = dialogProfileFilter === 'all' || profile.id === dialogProfileFilter;
-    const matchPlatform = dialogPlatformFilter === 'all' || account.platform === dialogPlatformFilter;
+    const matchProfile = dialogProfileFilter === "all" || profile.id === dialogProfileFilter;
+    const matchPlatform = dialogPlatformFilter === "all" || account.platform === dialogPlatformFilter;
     return matchProfile && matchPlatform;
   });
 
   const filteredAccountsWithoutSlots = accountsWithoutSlots.filter(({ profile, account }) => {
-    const matchProfile = dialogProfileFilter === 'all' || profile.id === dialogProfileFilter;
-    const matchPlatform = dialogPlatformFilter === 'all' || account.platform === dialogPlatformFilter;
+    const matchProfile = dialogProfileFilter === "all" || profile.id === dialogProfileFilter;
+    const matchPlatform = dialogPlatformFilter === "all" || account.platform === dialogPlatformFilter;
     return matchProfile && matchPlatform;
   });
-  
+
   return (
     <MainLayout>
       <div className="space-y-6 animate-fade-in">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold mb-1">Content</h1>
-          <p className="text-muted-foreground text-sm">
-            Upload and manage your video content
-          </p>
+          <p className="text-muted-foreground text-sm">Upload and manage your video content</p>
         </div>
-        
+
         {/* Upload Section - Main/Large */}
         <div className="glass rounded-xl p-8">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileSelect}
-            accept="video/*"
-            className="hidden"
-          />
-          
+          <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="video/*" className="hidden" />
+
           {selectedFile && videoPreviewUrl ? (
             <div className="space-y-6">
               {/* Video Preview - 16:9 aspect ratio container - clickable */}
-              <div 
-                className="relative w-full max-w-2xl mx-auto cursor-pointer group" 
-                style={{ aspectRatio: '16/9' }}
+              <div
+                className="relative w-full max-w-2xl mx-auto cursor-pointer group"
+                style={{ aspectRatio: "16/9" }}
                 onClick={handleUploadClick}
               >
                 <div className="absolute inset-0 bg-black rounded-xl overflow-hidden">
-                  <video
-                    src={videoPreviewUrl}
-                    className="w-full h-full object-contain pointer-events-none"
-                    muted
-                  />
+                  <video src={videoPreviewUrl} className="w-full h-full object-contain pointer-events-none" muted />
                 </div>
-                
+
                 {/* Hover overlay */}
                 <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white">
                   <Upload className="w-12 h-12 mb-2" />
                   <p className="font-medium">Click to change video</p>
                 </div>
               </div>
-              
+
               <div>
                 <label className="text-sm font-medium mb-2 block">Caption</label>
                 <Textarea
                   placeholder="Write your caption here..."
                   rows={3}
                   value={newContent.caption}
-                  onChange={(e) => setNewContent(prev => ({ ...prev, caption: e.target.value }))}
+                  onChange={(e) => setNewContent((prev) => ({ ...prev, caption: e.target.value }))}
                   className="resize-none max-w-2xl mx-auto"
                 />
               </div>
-              
+
               <div>
-                <label className="text-sm font-medium mb-2 block">Description</label>
+                <label className="text-sm font-medium mb-2 block">Description (optional)</label>
                 <Textarea
                   placeholder="Write your description here..."
                   rows={3}
                   value={newContent.description}
-                  onChange={(e) => setNewContent(prev => ({ ...prev, description: e.target.value }))}
+                  onChange={(e) => setNewContent((prev) => ({ ...prev, description: e.target.value }))}
                   className="resize-none max-w-2xl mx-auto"
                 />
               </div>
-              
+
               <div className="flex gap-3 justify-center">
-                <Button 
-                  onClick={handleUpload} 
-                  variant="default"
-                  disabled={!newContent.caption.trim() || isUploading}
-                >
+                <Button onClick={handleUpload} variant="default" disabled={!newContent.caption.trim() || isUploading}>
                   {isUploading ? (
                     <>
                       <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -464,7 +432,7 @@ export default function ContentPage() {
               </div>
             </div>
           ) : (
-            <div 
+            <div
               onClick={handleUploadClick}
               className="border-2 border-dashed border-border rounded-xl p-12 text-center hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer"
             >
@@ -474,33 +442,27 @@ export default function ContentPage() {
             </div>
           )}
         </div>
-        
+
         {/* Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="pending" className="gap-2">
               <div className="w-2 h-2 rounded-full bg-warning" />
               Pending
-              <span className="ml-1 px-1.5 py-0.5 rounded bg-secondary text-xs">
-                {pendingContents.length}
-              </span>
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-secondary text-xs">{pendingContents.length}</span>
             </TabsTrigger>
             <TabsTrigger value="assigned" className="gap-2">
               <div className="w-2 h-2 rounded-full bg-primary" />
               Assigned
-              <span className="ml-1 px-1.5 py-0.5 rounded bg-secondary text-xs">
-                {assignedContents.length}
-              </span>
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-secondary text-xs">{assignedContents.length}</span>
             </TabsTrigger>
             <TabsTrigger value="trash" className="gap-2">
               <Trash2 className="w-3.5 h-3.5" />
               Trash
-              <span className="ml-1 px-1.5 py-0.5 rounded bg-secondary text-xs">
-                {removedContents.length}
-              </span>
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-secondary text-xs">{removedContents.length}</span>
             </TabsTrigger>
           </TabsList>
-          
+
           {/* Pending Tab */}
           <TabsContent value="pending" className="mt-4">
             <div className="glass rounded-xl p-4">
@@ -516,8 +478,8 @@ export default function ContentPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {pendingContents.map(content => (
-                    <div 
+                  {pendingContents.map((content) => (
+                    <div
                       key={content.id}
                       className="p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors group"
                     >
@@ -531,29 +493,19 @@ export default function ContentPage() {
                               {content.file_name}
                             </p>
                             <p className="text-sm text-muted-foreground">
-                              {format(new Date(content.uploaded_at), 'MMM d, yyyy HH:mm')}
+                              {format(new Date(content.uploaded_at), "MMM d, yyyy HH:mm")}
                             </p>
                             {content.caption && (
-                              <p className="text-sm text-muted-foreground truncate mt-1">
-                                {content.caption}
-                              </p>
+                              <p className="text-sm text-muted-foreground truncate mt-1">{content.caption}</p>
                             )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => openAssignDialog(content.id)}
-                          >
+                          <Button size="sm" variant="outline" onClick={() => openAssignDialog(content.id)}>
                             <Send className="w-4 h-4 mr-1" />
                             Assign
                           </Button>
-                          <Button 
-                            size="icon-sm" 
-                            variant="ghost"
-                            onClick={() => handleDeleteContent(content.id)}
-                          >
+                          <Button size="icon-sm" variant="ghost" onClick={() => handleDeleteContent(content.id)}>
                             <Trash2 className="w-4 h-4 text-destructive" />
                           </Button>
                         </div>
@@ -564,7 +516,7 @@ export default function ContentPage() {
               )}
             </div>
           </TabsContent>
-          
+
           {/* Assigned Tab */}
           <TabsContent value="assigned" className="mt-4">
             <div className="glass rounded-xl p-4">
@@ -580,28 +532,26 @@ export default function ContentPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {assignedContents.map(content => {
+                  {assignedContents.map((content) => {
                     const profile = getProfileById(content.assigned_profile_id);
-                    const contentSlot = slots.find(s => s.id === content.scheduled_slot_id);
-                    const slotTime = contentSlot 
-                      ? `${String(contentSlot.hour).padStart(2, '0')}:${String(contentSlot.minute).padStart(2, '0')}`
+                    const contentSlot = slots.find((s) => s.id === content.scheduled_slot_id);
+                    const slotTime = contentSlot
+                      ? `${String(contentSlot.hour).padStart(2, "0")}:${String(contentSlot.minute).padStart(2, "0")}`
                       : null;
-                    
+
                     // Get platform from slot (not profile) for correct icon
                     const slotPlatform = contentSlot?.platform;
-                    
+
                     // Get connected account for profile picture - use slot platform
                     const connectedAccount = profile?.connected_accounts?.find(
-                      (acc: ConnectedAccount) => acc.platform === (slotPlatform || profile.platform)
+                      (acc: ConnectedAccount) => acc.platform === (slotPlatform || profile.platform),
                     ) as ConnectedAccount | undefined;
-                    
+
                     // Format scheduled date if available
-                    const scheduledDate = content.scheduled_at 
-                      ? format(new Date(content.scheduled_at), 'MMM d')
-                      : null;
-                    
+                    const scheduledDate = content.scheduled_at ? format(new Date(content.scheduled_at), "MMM d") : null;
+
                     return (
-                      <div 
+                      <div
                         key={content.id}
                         onClick={() => handleAssignedContentClick(content)}
                         className="p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors cursor-pointer"
@@ -609,8 +559,8 @@ export default function ContentPage() {
                         <div className="flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3 flex-1 min-w-0">
                             {connectedAccount?.profile_picture ? (
-                              <img 
-                                src={connectedAccount.profile_picture} 
+                              <img
+                                src={connectedAccount.profile_picture}
                                 alt={connectedAccount.username}
                                 className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                               />
@@ -631,11 +581,14 @@ export default function ContentPage() {
                               </p>
                               {(profile || slotPlatform) && (
                                 <div className="flex items-center gap-2 mt-1">
-                                  <PlatformIcon platform={(slotPlatform || profile?.platform) as Platform} className="w-4 h-4 text-muted-foreground" />
-                                  <span className="text-sm text-muted-foreground">@{connectedAccount?.username || profile?.name}</span>
-                                  {slotTime && (
-                                    <span className="text-sm text-muted-foreground">• {slotTime}</span>
-                                  )}
+                                  <PlatformIcon
+                                    platform={(slotPlatform || profile?.platform) as Platform}
+                                    className="w-4 h-4 text-muted-foreground"
+                                  />
+                                  <span className="text-sm text-muted-foreground">
+                                    @{connectedAccount?.username || profile?.name}
+                                  </span>
+                                  {slotTime && <span className="text-sm text-muted-foreground">• {slotTime}</span>}
                                   {scheduledDate && (
                                     <span className="text-sm text-muted-foreground">• {scheduledDate}</span>
                                   )}
@@ -643,19 +596,19 @@ export default function ContentPage() {
                               )}
                               {/* Caption - same as Pending tab */}
                               {content.caption && (
-                                <p className="text-sm text-muted-foreground truncate mt-1">
-                                  {content.caption}
-                                </p>
+                                <p className="text-sm text-muted-foreground truncate mt-1">{content.caption}</p>
                               )}
                             </div>
                           </div>
-                          <span className={cn(
-                            "px-3 py-1 rounded-full text-xs font-medium flex-shrink-0",
-                            content.status === 'scheduled' 
-                              ? "bg-primary/10 text-primary" 
-                              : "bg-warning/10 text-warning"
-                          )}>
-                            {content.status === 'scheduled' ? 'Scheduled' : 'Assigned'}
+                          <span
+                            className={cn(
+                              "px-3 py-1 rounded-full text-xs font-medium flex-shrink-0",
+                              content.status === "scheduled"
+                                ? "bg-primary/10 text-primary"
+                                : "bg-warning/10 text-warning",
+                            )}
+                          >
+                            {content.status === "scheduled" ? "Scheduled" : "Assigned"}
                           </span>
                         </div>
                       </div>
@@ -668,7 +621,7 @@ export default function ContentPage() {
               </p>
             </div>
           </TabsContent>
-          
+
           {/* Trash Tab */}
           <TabsContent value="trash" className="mt-4">
             <div className="glass rounded-xl p-4 border border-orange-200 bg-orange-50/50">
@@ -684,24 +637,24 @@ export default function ContentPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {removedContents.map(content => {
-                    const profile = content.removed_from_profile_id 
-                      ? getProfileById(content.removed_from_profile_id) 
+                  {removedContents.map((content) => {
+                    const profile = content.removed_from_profile_id
+                      ? getProfileById(content.removed_from_profile_id)
                       : null;
                     const connectedAccount = profile?.connected_accounts?.find(
-                      (acc: ConnectedAccount) => acc.platform === profile.platform
+                      (acc: ConnectedAccount) => acc.platform === profile.platform,
                     ) as ConnectedAccount | undefined;
-                    
+
                     return (
-                      <div 
+                      <div
                         key={content.id}
                         className="p-4 rounded-lg bg-white hover:bg-orange-50 transition-colors group border border-orange-100"
                       >
                         <div className="flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3 flex-1 min-w-0">
                             {connectedAccount?.profile_picture ? (
-                              <img 
-                                src={connectedAccount.profile_picture} 
+                              <img
+                                src={connectedAccount.profile_picture}
                                 alt={connectedAccount.username}
                                 className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                               />
@@ -721,29 +674,30 @@ export default function ContentPage() {
                               <div className="flex items-center gap-2 mt-1">
                                 {profile && (
                                   <>
-                                    <PlatformIcon platform={profile.platform as Platform} className="w-4 h-4 text-muted-foreground" />
-                                    <span className="text-sm text-muted-foreground">@{connectedAccount?.username || profile.name}</span>
+                                    <PlatformIcon
+                                      platform={profile.platform as Platform}
+                                      className="w-4 h-4 text-muted-foreground"
+                                    />
+                                    <span className="text-sm text-muted-foreground">
+                                      @{connectedAccount?.username || profile.name}
+                                    </span>
                                   </>
                                 )}
                                 {content.removed_at && (
                                   <span className="text-sm text-muted-foreground">
-                                    • {format(new Date(content.removed_at), 'MMM d, HH:mm')}
+                                    • {format(new Date(content.removed_at), "MMM d, HH:mm")}
                                   </span>
                                 )}
                               </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => openAssignDialog(content.id, true)}
-                            >
+                            <Button size="sm" variant="outline" onClick={() => openAssignDialog(content.id, true)}>
                               <Send className="w-4 h-4 mr-1" />
                               Assign
                             </Button>
-                            <Button 
-                              size="icon-sm" 
+                            <Button
+                              size="icon-sm"
                               variant="ghost"
                               onClick={() => handlePermanentDelete(content.id)}
                               title="Delete permanently"
@@ -760,14 +714,14 @@ export default function ContentPage() {
             </div>
           </TabsContent>
         </Tabs>
-        
+
         {/* Assign Dialog - Multi-Select with checkboxes */}
         <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
           <DialogContent className="bg-card border-border">
             <DialogHeader>
               <DialogTitle>Assign to Profile</DialogTitle>
             </DialogHeader>
-            
+
             {/* Filters */}
             <div className="flex items-center gap-2 pt-2">
               <Select value={dialogProfileFilter} onValueChange={setDialogProfileFilter}>
@@ -776,12 +730,14 @@ export default function ContentPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Profiles</SelectItem>
-                  {profiles.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              
+
               <Select value={dialogPlatformFilter} onValueChange={setDialogPlatformFilter}>
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder="All Platforms" />
@@ -809,14 +765,14 @@ export default function ContentPage() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="space-y-4">
               {filteredAccountsWithSlots.length === 0 && filteredAccountsWithoutSlots.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground mb-4">
                     No connected accounts yet. Connect your social media accounts first.
                   </p>
-                  <Button variant="outline" onClick={() => navigate('/profiles')}>
+                  <Button variant="outline" onClick={() => navigate("/profiles")}>
                     Go to Profiles
                   </Button>
                 </div>
@@ -831,29 +787,29 @@ export default function ContentPage() {
                       slotId: slot.id,
                       platform: account.platform,
                       username: account.username,
-                      time: `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}`,
-                      profilePicture: account.profile_picture
+                      time: `${String(slot.hour).padStart(2, "0")}:${String(slot.minute).padStart(2, "0")}`,
+                      profilePicture: account.profile_picture,
                     };
-                    
+
                     return (
                       <div
                         key={`${profile.id}-${account.platform}-${slot.id}`}
                         onClick={() => toggleSlotSelection(slotData)}
                         className={cn(
                           "flex items-center gap-3 p-4 rounded-lg cursor-pointer transition-colors",
-                          isSelected 
-                            ? "bg-primary/10 border-2 border-primary" 
-                            : "hover:bg-secondary border-2 border-transparent"
+                          isSelected
+                            ? "bg-primary/10 border-2 border-primary"
+                            : "hover:bg-secondary border-2 border-transparent",
                         )}
                       >
-                        <Checkbox 
+                        <Checkbox
                           checked={isSelected}
                           onCheckedChange={() => toggleSlotSelection(slotData)}
                           className="pointer-events-none"
                         />
                         {account.profile_picture ? (
-                          <img 
-                            src={account.profile_picture} 
+                          <img
+                            src={account.profile_picture}
                             alt={account.username}
                             className="w-10 h-10 rounded-full object-cover"
                           />
@@ -867,20 +823,16 @@ export default function ContentPage() {
                             <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
                             <span className="font-medium">@{account.username}</span>
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            {profile.name}
-                          </p>
+                          <p className="text-sm text-muted-foreground">{profile.name}</p>
                         </div>
                         <span className="text-sm font-medium text-primary">
-                          {String(slot.hour).padStart(2, '0')}:{String(slot.minute).padStart(2, '0')}
+                          {String(slot.hour).padStart(2, "0")}:{String(slot.minute).padStart(2, "0")}
                         </span>
-                        {isSelected && (
-                          <Check className="w-5 h-5 text-primary" />
-                        )}
+                        {isSelected && <Check className="w-5 h-5 text-primary" />}
                       </div>
                     );
                   })}
-                  
+
                   {/* Accounts without slots - disabled */}
                   {filteredAccountsWithoutSlots.map(({ profile, account }) => (
                     <div
@@ -889,8 +841,8 @@ export default function ContentPage() {
                     >
                       <Checkbox disabled className="pointer-events-none" />
                       {account.profile_picture ? (
-                        <img 
-                          src={account.profile_picture} 
+                        <img
+                          src={account.profile_picture}
                           alt={account.username}
                           className="w-10 h-10 rounded-full object-cover"
                         />
@@ -904,9 +856,7 @@ export default function ContentPage() {
                           <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
                           <span className="font-medium">@{account.username}</span>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {profile.name}
-                        </p>
+                        <p className="text-sm text-muted-foreground">{profile.name}</p>
                       </div>
                       <div className="flex items-center gap-1 text-warning text-xs">
                         <AlertCircle className="w-3.5 h-3.5" />
@@ -917,19 +867,14 @@ export default function ContentPage() {
                 </div>
               )}
             </div>
-            
+
             {/* Footer with selected count and assign button */}
             {(filteredAccountsWithSlots.length > 0 || filteredAccountsWithoutSlots.length > 0) && (
               <DialogFooter className="flex items-center justify-between sm:justify-between">
-                <span className="text-sm text-muted-foreground">
-                  {selectedSlots.length} selected
-                </span>
-                <Button 
-                  onClick={handleMultiAssign}
-                  disabled={selectedSlots.length === 0}
-                >
+                <span className="text-sm text-muted-foreground">{selectedSlots.length} selected</span>
+                <Button onClick={handleMultiAssign} disabled={selectedSlots.length === 0}>
                   <Send className="w-4 h-4 mr-1" />
-                  Assign{selectedSlots.length > 0 ? ` to ${selectedSlots.length}` : ''}
+                  Assign{selectedSlots.length > 0 ? ` to ${selectedSlots.length}` : ""}
                 </Button>
               </DialogFooter>
             )}

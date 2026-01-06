@@ -42,20 +42,19 @@ serve(async (req) => {
     const result = Array.isArray(responseData) ? responseData[0] : responseData;
     console.log('Parsed result:', result);
 
-    // Check if response contains error object (e.g., 409 conflict)
+    // Check if response contains error object (e.g., 409 conflict, 403 limit reached)
     if (result?.error) {
       let errorMessage = 'Failed to create profile';
-      let statusCode = 500;
+      let errorCode = 'ERROR';
       
       // Parse the nested error message from n8n format
-      // Format: { "error": { "message": "409 - \"{\"success\":false,\"message\":\"Username already in use\"}\n\"" } }
+      // Format: { "error": { "message": "403 - \"{\"success\":false,\"message\":\"You have reached the limit...\"}\n\"" } }
       const errorMsg = result.error.message || '';
       
-      // Check if it's a 409 error by looking at the message string
+      // Check if it's a 409 error - Username already in use
       if (errorMsg.includes('409')) {
-        statusCode = 409;
+        errorCode = 'USERNAME_EXISTS';
         try {
-          // Extract JSON from the message string
           const jsonMatch = errorMsg.match(/\{[^{}]*"message"\s*:\s*"[^"]*"[^{}]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
@@ -67,8 +66,38 @@ serve(async (req) => {
           errorMessage = 'Username already in use';
         }
       }
+      // Check if it's a 403 error - Profile limit reached
+      else if (errorMsg.includes('403')) {
+        errorCode = 'LIMIT_REACHED';
+        try {
+          const jsonMatch = errorMsg.match(/\{[^{}]*"message"\s*:\s*"[^"]*"[^{}]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            errorMessage = parsed.message || 'Profile limit reached for current plan';
+          } else {
+            errorMessage = 'Profile limit reached for current plan';
+          }
+        } catch {
+          errorMessage = 'Profile limit reached for current plan';
+        }
+      }
+      // Check if it's a 400 error - Invalid username format
+      else if (errorMsg.includes('400')) {
+        errorCode = 'INVALID_USERNAME';
+        try {
+          const jsonMatch = errorMsg.match(/\{[^{}]*"message"\s*:\s*"[^"]*"[^{}]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            errorMessage = parsed.message || 'Invalid username format';
+          } else {
+            errorMessage = 'Invalid username format';
+          }
+        } catch {
+          errorMessage = 'Invalid username format';
+        }
+      }
       
-      console.error('Webhook error:', { statusCode, errorMessage, error: result.error });
+      console.error('Webhook error:', { errorCode, errorMessage, error: result.error });
       
       // Return 200 with error in body so Supabase client can read it
       // (non-2xx status codes cause Supabase client to throw without reading body)
@@ -76,7 +105,7 @@ serve(async (req) => {
         JSON.stringify({ 
           success: false, 
           error: errorMessage, 
-          code: statusCode === 409 ? 'USERNAME_EXISTS' : 'ERROR' 
+          code: errorCode 
         }),
         { 
           status: 200,

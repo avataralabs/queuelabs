@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.get-user-info]
 verify_jwt = false
+
+[functions.assign-content]
+verify_jwt = false

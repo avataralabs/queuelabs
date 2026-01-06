@@ -34,12 +34,16 @@ Deno.serve(async (req) => {
     const caption = formData.get('caption') as string || '';
     const description = formData.get('description') as string || '';
     const videoFile = formData.get('video') as File;
+    const scheduleDatetime = formData.get('schedule_datetime') as string | null;
+    const isManualMode = !!scheduleDatetime;
 
     console.log('Received assign-content request:', { 
       username, account, platform, scheduleHour, scheduleMinute, 
       hasVideo: !!videoFile,
       videoName: videoFile?.name,
-      videoSize: videoFile?.size
+      videoSize: videoFile?.size,
+      scheduleDatetime,
+      mode: isManualMode ? 'manual' : 'auto'
     });
 
     // Validate required fields
@@ -173,14 +177,74 @@ Deno.serve(async (req) => {
 
     console.log('File uploaded:', fileName);
 
-    // 5. Calculate next scheduled_at based on slot
-    const now = new Date();
-    const scheduledAt = new Date();
-    scheduledAt.setHours(scheduleHour, scheduleMinute, 0, 0);
-    
-    // If time has passed today, schedule for tomorrow
-    if (scheduledAt <= now) {
-      scheduledAt.setDate(scheduledAt.getDate() + 1);
+    // 5. Calculate scheduled_at based on mode (auto or manual)
+    let scheduledAt: Date;
+    let scheduleMode: string;
+
+    if (isManualMode) {
+      // Manual mode: use provided datetime directly
+      scheduledAt = new Date(scheduleDatetime!);
+      scheduleMode = 'manual';
+      console.log('Manual mode: using provided datetime', scheduledAt.toISOString());
+    } else {
+      // Auto mode: find next available slot that is > now
+      const now = new Date();
+      
+      // Start from today at midnight
+      const startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+
+      // Check if slot time has already passed today
+      const todaySlotTime = new Date();
+      todaySlotTime.setHours(scheduleHour, scheduleMinute, 0, 0);
+
+      // If slot time already passed today, start from tomorrow
+      if (now > todaySlotTime) {
+        startDate.setDate(startDate.getDate() + 1);
+      }
+
+      // Get all dates that already have content assigned to this slot
+      const { data: existingContents } = await supabase
+        .from('contents')
+        .select('scheduled_at')
+        .eq('scheduled_slot_id', slot.id)
+        .eq('user_id', user.id)
+        .in('status', ['assigned', 'scheduled']);
+
+      const occupiedDates = (existingContents || [])
+        .map((c: { scheduled_at: string | null }) => {
+          if (!c.scheduled_at) return null;
+          const d = new Date(c.scheduled_at);
+          return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+        })
+        .filter(Boolean);
+
+      console.log('Occupied dates for slot:', occupiedDates);
+
+      // Find the first available date
+      scheduledAt = new Date(startDate);
+      for (let i = 0; i < 365; i++) {
+        const checkDate = new Date(startDate);
+        checkDate.setDate(checkDate.getDate() + i);
+
+        // For weekly slots, check if this day of week is active
+        if (slot.type === 'weekly' && slot.week_days) {
+          if (!slot.week_days.includes(checkDate.getDay())) {
+            continue;
+          }
+        }
+
+        const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
+        if (!occupiedDates.includes(dateKey)) {
+          scheduledAt = checkDate;
+          break;
+        }
+      }
+
+      // Set the time to the slot's hour and minute
+      scheduledAt.setHours(scheduleHour, scheduleMinute, 0, 0);
+      scheduleMode = 'auto';
+      console.log('Auto mode: found next available date', scheduledAt.toISOString());
     }
 
     // 6. Create content record
@@ -225,7 +289,8 @@ Deno.serve(async (req) => {
             slot_id: slot.id,
             hour: slot.hour,
             minute: slot.minute,
-            scheduled_at: scheduledAt.toISOString()
+            scheduled_at: scheduledAt.toISOString(),
+            mode: scheduleMode
           }
         }
       }),

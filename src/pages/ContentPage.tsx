@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, AlertCircle, Check } from "lucide-react";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { cn, formatUsername } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface SelectedSlot {
@@ -586,7 +586,7 @@ export default function ContentPage() {
                                     className="w-4 h-4 text-muted-foreground"
                                   />
                                   <span className="text-sm text-muted-foreground">
-                                    @{connectedAccount?.username || profile?.name}
+                                    {formatUsername(connectedAccount?.username || profile?.name || '')}
                                   </span>
                                   {slotTime && <span className="text-sm text-muted-foreground">• {slotTime}</span>}
                                   {scheduledDate && (
@@ -679,7 +679,7 @@ export default function ContentPage() {
                                       className="w-4 h-4 text-muted-foreground"
                                     />
                                     <span className="text-sm text-muted-foreground">
-                                      @{connectedAccount?.username || profile.name}
+                                      {formatUsername(connectedAccount?.username || profile.name)}
                                     </span>
                                   </>
                                 )}
@@ -821,7 +821,7 @@ export default function ContentPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
-                            <span className="font-medium">@{account.username}</span>
+                            <span className="font-medium">{formatUsername(account.username)}</span>
                           </div>
                           <p className="text-sm text-muted-foreground">{profile.name}</p>
                         </div>
@@ -854,7 +854,7 @@ export default function ContentPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
-                          <span className="font-medium">@{account.username}</span>
+                          <span className="font-medium">{formatUsername(account.username)}</span>
                         </div>
                         <p className="text-sm text-muted-foreground">{profile.name}</p>
                       </div>

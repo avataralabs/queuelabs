@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.process-scheduled-uploads]
 verify_jwt = false
+
+[functions.get-user-info]
+verify_jwt = false

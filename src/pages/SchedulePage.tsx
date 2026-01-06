@@ -17,6 +17,7 @@ import {
 import { ChevronLeft, ChevronRight, Calendar, Clock, Settings } from 'lucide-react';
 import { subDays, addDays, startOfDay, isToday, parseISO } from 'date-fns';
 import { Platform } from '@/types';
+import { formatUsername } from '@/lib/utils';
 
 // Type untuk account item di dropdown
 type AccountItem = {
@@ -211,7 +212,7 @@ export default function SchedulePage() {
                           <div className="flex items-center gap-2">
                             <PlatformBadge platform={item.platform} size="sm" showLabel={false} variant="icon" />
                             <span>{item.profileName}</span>
-                            {item.username && <span className="text-muted-foreground text-xs">@{item.username}</span>}
+                            {item.username && <span className="text-muted-foreground text-xs">{formatUsername(item.username)}</span>}
                           </div>
                         </SelectItem>
                       ))}

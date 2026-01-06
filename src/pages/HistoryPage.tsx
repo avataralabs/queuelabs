@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { History, FileVideo, CheckCircle, XCircle, Filter, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatUsername } from '@/lib/utils';
 import type { Platform } from '@/hooks/useProfiles';
 
 export default function HistoryPage() {
@@ -165,7 +165,7 @@ export default function HistoryPage() {
                             <>
                               <PlatformIcon platform={profile.platform as Platform} className="w-4 h-4 text-muted-foreground" />
                               <span className="text-sm text-muted-foreground">
-                                @{connectedAccount?.username || profile.name}
+                                {formatUsername(connectedAccount?.username || profile.name)}
                               </span>
                             </>
                           )}

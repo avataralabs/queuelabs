@@ -308,13 +308,28 @@ export default function ContentPage() {
 
       params.set("profile", content.assigned_profile_id);
 
-      if (contentSlot) {
-        params.set("platform", contentSlot.platform);
-        params.set("hour", String(contentSlot.hour));
+      // Platform: prioritas content.platform > slot.platform
+      const platform = content.platform || contentSlot?.platform;
+      if (platform) {
+        params.set("platform", platform);
       }
 
+      // Hour: dari slot atau dari scheduled_at
+      if (contentSlot) {
+        params.set("hour", String(contentSlot.hour));
+      } else if (content.scheduled_at) {
+        // Manual mode: extract hour dari scheduled_at
+        const scheduledDate = new Date(content.scheduled_at);
+        params.set("hour", String(scheduledDate.getHours()));
+      }
+
+      // Date: parse dengan benar menggunakan local timezone
       if (content.scheduled_at) {
-        params.set("date", content.scheduled_at.split("T")[0]);
+        const scheduledDate = new Date(content.scheduled_at);
+        const year = scheduledDate.getFullYear();
+        const month = String(scheduledDate.getMonth() + 1).padStart(2, '0');
+        const day = String(scheduledDate.getDate()).padStart(2, '0');
+        params.set("date", `${year}-${month}-${day}`);
       }
 
       params.set("contentId", content.id);

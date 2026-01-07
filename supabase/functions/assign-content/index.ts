@@ -167,22 +167,9 @@ Deno.serve(async (req) => {
     let slot: { id: string; hour: number; minute: number; type: string; week_days: number[] | null } | null = null;
 
     if (isManualMode) {
-      // Manual mode: slot is optional, just find any active slot for this profile/platform
-      const { data: slots, error: slotsError } = await supabase
-        .from('schedule_slots')
-        .select('*')
-        .eq('profile_id', matchedProfile.id)
-        .eq('platform', platform)
-        .eq('is_active', true)
-        .limit(1);
-
-      if (slotsError) {
-        console.error('Error fetching slots:', slotsError);
-        throw slotsError;
-      }
-
-      slot = slots?.[0] || null;
-      console.log('Manual mode - slot optional, found:', slot?.id || 'none');
+      // Manual mode: no slot needed, scheduling is based on schedule_datetime only
+      slot = null;
+      console.log('Manual mode - no slot required, using schedule_datetime');
     } else {
       // Auto mode: slot is required with matching hour/minute
       const { data: slots, error: slotsError } = await supabase

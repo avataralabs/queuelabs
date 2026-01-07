@@ -19,7 +19,7 @@ export interface UploadHistoryWithDetails {
   status: UploadStatus;
   error_message: string | null;
   user_id: string;
-  contents: { file_name: string; file_url: string | null } | null;
+  contents: { file_name: string; file_url: string | null; platform: string | null } | null;
   profiles: { 
     name: string; 
     platform: string; 
@@ -40,7 +40,7 @@ export function useUploadHistory() {
         .from('upload_history')
         .select(`
           *,
-          contents:content_id (file_name, file_url),
+          contents:content_id (file_name, file_url, platform),
           profiles:profile_id (name, platform, connected_accounts)
         `)
         .order('uploaded_at', { ascending: false });

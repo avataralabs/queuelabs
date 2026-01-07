@@ -122,11 +122,16 @@ export default function HistoryPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredHistory.map(entry => {
+            {filteredHistory.map(entry => {
                 const profile = entry.profiles;
                 const content = entry.contents;
+                
+                // Platform: prioritas content.platform > profile.platform
+                const contentPlatform = content?.platform || profile?.platform;
+                
+                // Get connected account berdasarkan content platform
                 const connectedAccount = profile?.connected_accounts?.find(
-                  (acc: ConnectedAccount) => acc.platform === profile.platform
+                  (acc: ConnectedAccount) => acc.platform === contentPlatform
                 );
                 
                 return (
@@ -146,8 +151,8 @@ export default function HistoryPage() {
                           "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
                           entry.status === 'success' ? "bg-success/10" : "bg-destructive/10"
                         )}>
-                          {profile ? (
-                            <PlatformIcon platform={profile.platform as Platform} className="w-5 h-5" />
+                          {contentPlatform ? (
+                            <PlatformIcon platform={contentPlatform as Platform} className="w-5 h-5" />
                           ) : entry.status === 'success' ? (
                             <CheckCircle className="w-5 h-5 text-success" />
                           ) : (
@@ -161,11 +166,11 @@ export default function HistoryPage() {
                           {content?.file_name || 'Unknown content'}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
-                          {profile && (
+                          {contentPlatform && (
                             <>
-                              <PlatformIcon platform={profile.platform as Platform} className="w-4 h-4 text-muted-foreground" />
+                              <PlatformIcon platform={contentPlatform as Platform} className="w-4 h-4 text-muted-foreground" />
                               <span className="text-sm text-muted-foreground">
-                                {formatUsername(connectedAccount?.username || profile.name)}
+                                {formatUsername(connectedAccount?.username || profile?.name || '')}
                               </span>
                             </>
                           )}

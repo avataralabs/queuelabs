@@ -508,40 +508,56 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                   <div className="space-y-4">
                     <ScrollArea className="max-h-[300px]">
                       <div className="space-y-3">
-                        {selectedSlot.contents.map(content => (
-                          <div key={content.id} className="p-4 rounded-lg bg-secondary/30">
-                            <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                <FileVideo className="w-6 h-6 text-primary" />
+                        {selectedSlot.contents.map(content => {
+                          // Get actual scheduled time from content
+                          const actualTime = content.scheduled_at 
+                            ? format(new Date(content.scheduled_at), 'HH:mm')
+                            : `${selectedSlot.hour.toString().padStart(2, '0')}:00`;
+                          const isManualMode = !content.scheduled_slot_id;
+                          
+                          return (
+                            <div key={content.id} className="p-4 rounded-lg bg-secondary/30">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                  <FileVideo className="w-6 h-6 text-primary" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium truncate" title={content.file_name}>{content.file_name}</p>
+                                  <p className="text-sm text-muted-foreground truncate" title={content.caption || 'No caption'}>
+                                    {content.caption || 'No caption'}
+                                  </p>
+                                  {/* Show actual scheduled time */}
+                                  <p className="text-xs text-primary mt-1 flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    Scheduled: {actualTime}
+                                    {isManualMode && (
+                                      <span className="ml-1 text-amber-500">(manual)</span>
+                                    )}
+                                  </p>
+                                </div>
                               </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium truncate" title={content.file_name}>{content.file_name}</p>
-                                <p className="text-sm text-muted-foreground truncate" title={content.caption || 'No caption'}>
-                                  {content.caption || 'No caption'}
-                                </p>
+                              
+                              <div className="grid grid-cols-2 gap-2 mt-3">
+                                <Button 
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleUnschedule(content.id)}
+                                >
+                                  <RotateCcw className="w-3 h-3 mr-1" />
+                                  Unschedule
+                                </Button>
+                                <Button 
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleRemoveFromSchedule(content.id)}
+                                >
+                                  <Trash2 className="w-3 h-3 mr-1" />
+                                  Remove
+                                </Button>
                               </div>
                             </div>
-                            
-                            <div className="grid grid-cols-2 gap-2 mt-3">
-                              <Button 
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleUnschedule(content.id)}
-                              >
-                                <RotateCcw className="w-3 h-3 mr-1" />
-                                Unschedule
-                              </Button>
-                              <Button 
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleRemoveFromSchedule(content.id)}
-                              >
-                                <Trash2 className="w-3 h-3 mr-1" />
-                                Remove
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </ScrollArea>
                     

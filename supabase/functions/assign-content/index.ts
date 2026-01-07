@@ -237,16 +237,28 @@ Deno.serve(async (req) => {
     // 5. Calculate scheduled_at based on mode (auto or manual)
     // All times are handled in WIB (UTC+7) and converted to UTC for storage
     let scheduledAtUtc: Date;
-    let scheduledAtWib: Date;
-    let scheduleMode: string;
+    let manualWibDateStr: string = '';
 
     if (isManualMode) {
-      // Manual mode: assume schedule_datetime is in WIB, convert to UTC
-      const wibTime = new Date(scheduleDatetime!);
-      scheduledAtWib = wibTime;
-      scheduledAtUtc = wibToUtc(wibTime);
-      scheduleMode = 'manual';
-      console.log('Manual mode - WIB:', wibTime.toISOString(), '-> UTC:', scheduledAtUtc.toISOString());
+      // Manual mode: schedule_datetime is already in WIB (UTC+7)
+      // Parse manually to avoid timezone issues
+      // Example input: "2026-01-08T08:08:00" means 08:08 WIB
+      const dateStr = scheduleDatetime!;
+      const [datePart, timePart] = dateStr.includes('T') 
+        ? dateStr.split('T') 
+        : [dateStr.split(' ')[0], dateStr.split(' ')[1] || '00:00:00'];
+      
+      const [year, month, day] = datePart.split('-').map(Number);
+      const timeClean = timePart.split('+')[0].split('Z')[0]; // Remove any timezone suffix
+      const [hour, minute, second] = timeClean.split(':').map(s => parseInt(s) || 0);
+      
+      // Create UTC date: WIB - 7 hours
+      scheduledAtUtc = new Date(Date.UTC(year, month - 1, day, hour - WIB_OFFSET_HOURS, minute, second));
+      
+      // Format WIB string for response
+      manualWibDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+07:00`;
+      
+      console.log('Manual mode - Input WIB:', dateStr, '-> UTC:', scheduledAtUtc.toISOString());
     } else {
       // Auto mode: find next available slot that is > now (in WIB context)
       const nowWib = nowInWib();
@@ -290,7 +302,7 @@ Deno.serve(async (req) => {
       console.log('Occupied dates for slot (WIB):', occupiedDates);
 
       // Find the first available date (working in WIB)
-      scheduledAtWib = new Date(startDate);
+      let scheduledAtWib = new Date(startDate);
       for (let i = 0; i < 365; i++) {
         const checkDate = new Date(startDate);
         checkDate.setDate(checkDate.getDate() + i);
@@ -314,7 +326,6 @@ Deno.serve(async (req) => {
       
       // Convert WIB to UTC for storage
       scheduledAtUtc = wibToUtc(scheduledAtWib);
-      scheduleMode = 'auto';
       
       console.log('Auto mode - Scheduled WIB:', scheduledAtWib.toISOString(), '-> UTC:', scheduledAtUtc.toISOString());
     }
@@ -344,9 +355,19 @@ Deno.serve(async (req) => {
 
     console.log('Content created:', content.id, 'Scheduled UTC:', scheduledAtUtc.toISOString());
 
-    // Extract hour/minute from scheduledAtWib for response
-    const responseHour = slot?.hour ?? scheduledAtWib.getHours();
-    const responseMinute = slot?.minute ?? scheduledAtWib.getMinutes();
+    // Build response based on mode
+    const scheduleResponse = isManualMode 
+      ? {
+          scheduled_at: manualWibDateStr,
+          mode: 'manual'
+        }
+      : {
+          slot_id: slot!.id,
+          hour: slot!.hour,
+          minute: slot!.minute,
+          scheduled_at: formatWib(scheduledAtUtc),
+          mode: 'auto'
+        };
 
     return new Response(
       JSON.stringify({
@@ -361,15 +382,7 @@ Deno.serve(async (req) => {
             name: matchedProfile.name,
             platform: platform
           },
-          schedule: {
-            slot_id: slot?.id || null,
-            hour: responseHour,
-            minute: responseMinute,
-            scheduled_at_utc: scheduledAtUtc.toISOString(),
-            scheduled_at_wib: formatWib(scheduledAtUtc),
-            timezone: 'UTC+7 (WIB)',
-            mode: scheduleMode
-          }
+          schedule: scheduleResponse
         }
       }),
       { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

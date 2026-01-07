@@ -530,9 +530,6 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                                   <p className="text-xs text-primary mt-1 flex items-center gap-1">
                                     <Clock className="w-3 h-3" />
                                     Scheduled: {actualTime}
-                                    {isManualMode && (
-                                      <span className="ml-1 text-amber-500">(manual)</span>
-                                    )}
                                   </p>
                                 </div>
                               </div>

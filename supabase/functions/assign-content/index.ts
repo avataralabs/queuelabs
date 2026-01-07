@@ -330,7 +330,8 @@ Deno.serve(async (req) => {
         status: 'assigned',
         assigned_profile_id: matchedProfile.id,
         scheduled_slot_id: slot?.id || null,
-        scheduled_at: scheduledAtUtc.toISOString()
+        scheduled_at: scheduledAtUtc.toISOString(),
+        platform: platform  // Store platform for manual mode display
       })
       .select()
       .single();

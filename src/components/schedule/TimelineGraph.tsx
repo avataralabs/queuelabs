@@ -53,11 +53,23 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   );
   
   // Get assigned/scheduled/uploaded contents for this profile and platform
-  const assignedContents = contents.filter(c => 
+  // Include both slot-based content AND manual content (no scheduled_slot_id but has scheduled_at)
+  const slotBasedContents = contents.filter(c => 
     c.assigned_profile_id === profileId &&
     c.scheduled_slot_id &&
     (c.status === 'assigned' || c.status === 'scheduled' || c.status === 'uploaded')
   );
+  
+  // Manual mode content: has scheduled_at but no scheduled_slot_id
+  const manualContents = contents.filter(c => 
+    c.assigned_profile_id === profileId &&
+    !c.scheduled_slot_id &&
+    c.scheduled_at &&
+    (c.platform === platform || !c.platform) &&  // Match platform or fallback if no platform stored
+    (c.status === 'assigned' || c.status === 'scheduled' || c.status === 'uploaded')
+  );
+  
+  const assignedContents = [...slotBasedContents, ...manualContents];
   
   // Get pending contents for scheduling
   const pendingContents = contents.filter(c => c.status === 'pending');
@@ -91,9 +103,9 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   // Get all contents for a specific date and hour (supports multiple contents per slot)
   const getContentsForSlot = (date: Date, hour: number): typeof contents => {
     const slot = getSlotForHour(hour);
-    if (!slot) return [];
     
-    return assignedContents.filter(c => {
+    // Get slot-based contents
+    const slotContents = slot ? slotBasedContents.filter(c => {
       if (c.scheduled_slot_id !== slot.id) return false;
       
       // If content has scheduled_at, match by date
@@ -108,7 +120,25 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
       
       // Legacy: content without scheduled_at shows on first date only (today)
       return isToday(date);
+    }) : [];
+    
+    // Get manual mode contents for this hour (no slot required)
+    const manualSlotContents = manualContents.filter(c => {
+      if (!c.scheduled_at) return false;
+      
+      const contentDate = new Date(c.scheduled_at);
+      // Convert UTC to local hour for matching
+      const contentHour = contentDate.getHours();
+      
+      return (
+        contentDate.getFullYear() === date.getFullYear() &&
+        contentDate.getMonth() === date.getMonth() &&
+        contentDate.getDate() === date.getDate() &&
+        contentHour === hour
+      );
     });
+    
+    return [...slotContents, ...manualSlotContents];
   };
   
   const handleSlotClick = (date: Date, hour: number) => {

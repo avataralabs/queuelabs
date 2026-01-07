@@ -539,12 +539,12 @@ export default function ContentPage() {
                       ? `${String(contentSlot.hour).padStart(2, "0")}:${String(contentSlot.minute).padStart(2, "0")}`
                       : null;
 
-                    // Get platform from slot (not profile) for correct icon
-                    const slotPlatform = contentSlot?.platform;
+                    // Get platform: prioritize content.platform (for manual mode), then slot, then profile
+                    const contentPlatform = content.platform || contentSlot?.platform || profile?.platform;
 
-                    // Get connected account for profile picture - use slot platform
+                    // Get connected account for profile picture - use content platform
                     const connectedAccount = profile?.connected_accounts?.find(
-                      (acc: ConnectedAccount) => acc.platform === (slotPlatform || profile.platform),
+                      (acc: ConnectedAccount) => acc.platform === contentPlatform,
                     ) as ConnectedAccount | undefined;
 
                     // Format scheduled date if available
@@ -566,10 +566,8 @@ export default function ContentPage() {
                               />
                             ) : (
                               <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
-                                {slotPlatform ? (
-                                  <PlatformIcon platform={slotPlatform as Platform} className="w-5 h-5" />
-                                ) : profile ? (
-                                  <PlatformIcon platform={profile.platform as Platform} className="w-5 h-5" />
+                                {contentPlatform ? (
+                                  <PlatformIcon platform={contentPlatform as Platform} className="w-5 h-5" />
                                 ) : (
                                   <FileVideo className="w-5 h-5 text-primary" />
                                 )}
@@ -579,10 +577,10 @@ export default function ContentPage() {
                               <p className="font-medium truncate" title={content.file_name}>
                                 {content.file_name}
                               </p>
-                              {(profile || slotPlatform) && (
+                              {(profile || contentPlatform) && (
                                 <div className="flex items-center gap-2 mt-1">
                                   <PlatformIcon
-                                    platform={(slotPlatform || profile?.platform) as Platform}
+                                    platform={contentPlatform as Platform}
                                     className="w-4 h-4 text-muted-foreground"
                                   />
                                   <span className="text-sm text-muted-foreground">

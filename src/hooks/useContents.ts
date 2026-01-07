@@ -23,6 +23,7 @@ export interface Content {
   is_locked: boolean | null;
   upload_attempted_at: string | null;
   webhook_response: unknown | null;
+  platform: string | null;
 }
 
 export function useContents(status?: ContentStatus | ContentStatus[]) {

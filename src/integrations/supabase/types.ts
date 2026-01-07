@@ -24,6 +24,7 @@ export type Database = {
           file_url: string | null
           id: string
           is_locked: boolean | null
+          platform: string | null
           removed_at: string | null
           removed_from_profile_id: string | null
           scheduled_at: string | null
@@ -43,6 +44,7 @@ export type Database = {
           file_url?: string | null
           id?: string
           is_locked?: boolean | null
+          platform?: string | null
           removed_at?: string | null
           removed_from_profile_id?: string | null
           scheduled_at?: string | null
@@ -62,6 +64,7 @@ export type Database = {
           file_url?: string | null
           id?: string
           is_locked?: boolean | null
+          platform?: string | null
           removed_at?: string | null
           removed_from_profile_id?: string | null
           scheduled_at?: string | null

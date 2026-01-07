@@ -99,16 +99,16 @@ Deno.serve(async (req) => {
         continue
       }
 
-      // Fetch slot info separately if needed (for platform info)
-      let slotPlatform = profile.platform // Default to profile platform
-      if (content.scheduled_slot_id) {
+      // Get platform: prioritize content.platform (manual mode), then slot, then profile
+      let uploadPlatform = content.platform || profile.platform
+      if (!content.platform && content.scheduled_slot_id) {
         const { data: slot } = await supabase
           .from('schedule_slots')
           .select('platform')
           .eq('id', content.scheduled_slot_id)
           .single()
         if (slot) {
-          slotPlatform = slot.platform
+          uploadPlatform = slot.platform
         }
       }
 
@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
         // Prepare data for webhook
         const webhookData = new FormData()
         webhookData.append('data', 'upload')
-        webhookData.append('platform', slotPlatform || '')
+        webhookData.append('platform', uploadPlatform || '')
         webhookData.append('title', content.caption || content.file_name || '')
         webhookData.append('description', content.description || '')
         webhookData.append('user', profile.uploadpost_username || profile.name)

@@ -70,12 +70,23 @@ Deno.serve(async (req) => {
       currentTimeUtc: new Date().toISOString()
     });
 
-    // Validate required fields
-    if (!username || !account || !platform || isNaN(scheduleHour)) {
+    // Validate required fields - schedule_hour only required for auto mode
+    if (!username || !account || !platform) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Missing required fields: username, account, platform, schedule_hour' 
+          error: 'Missing required fields: username, account, platform' 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // schedule_hour is required only for auto mode
+    if (!isManualMode && isNaN(scheduleHour)) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Missing required field: schedule_hour (required for auto mode)' 
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -152,33 +163,55 @@ Deno.serve(async (req) => {
 
     console.log('Found profile:', matchedProfile.id, matchedProfile.name);
 
-    // 3. Find matching schedule slot
-    const { data: slots, error: slotsError } = await supabase
-      .from('schedule_slots')
-      .select('*')
-      .eq('profile_id', matchedProfile.id)
-      .eq('platform', platform)
-      .eq('hour', scheduleHour)
-      .eq('minute', scheduleMinute)
-      .eq('is_active', true);
+    // 3. Find schedule slot - conditional based on mode
+    let slot: { id: string; hour: number; minute: number; type: string; week_days: number[] | null } | null = null;
 
-    if (slotsError) {
-      console.error('Error fetching slots:', slotsError);
-      throw slotsError;
+    if (isManualMode) {
+      // Manual mode: slot is optional, just find any active slot for this profile/platform
+      const { data: slots, error: slotsError } = await supabase
+        .from('schedule_slots')
+        .select('*')
+        .eq('profile_id', matchedProfile.id)
+        .eq('platform', platform)
+        .eq('is_active', true)
+        .limit(1);
+
+      if (slotsError) {
+        console.error('Error fetching slots:', slotsError);
+        throw slotsError;
+      }
+
+      slot = slots?.[0] || null;
+      console.log('Manual mode - slot optional, found:', slot?.id || 'none');
+    } else {
+      // Auto mode: slot is required with matching hour/minute
+      const { data: slots, error: slotsError } = await supabase
+        .from('schedule_slots')
+        .select('*')
+        .eq('profile_id', matchedProfile.id)
+        .eq('platform', platform)
+        .eq('hour', scheduleHour)
+        .eq('minute', scheduleMinute)
+        .eq('is_active', true);
+
+      if (slotsError) {
+        console.error('Error fetching slots:', slotsError);
+        throw slotsError;
+      }
+
+      if (!slots || slots.length === 0) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: `Schedule slot not found for ${scheduleHour}:${scheduleMinute.toString().padStart(2, '0')} on ${platform}` 
+          }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      slot = slots[0];
+      console.log('Auto mode - slot required, found:', slot!.id);
     }
-
-    if (!slots || slots.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: `Schedule slot not found for ${scheduleHour}:${scheduleMinute.toString().padStart(2, '0')} on ${platform}` 
-        }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const slot = slots[0];
-    console.log('Found slot:', slot.id);
 
     // 4. Upload video to storage
     const fileExt = videoFile.name.split('.').pop() || 'mp4';
@@ -239,7 +272,7 @@ Deno.serve(async (req) => {
       const { data: existingContents } = await supabase
         .from('contents')
         .select('scheduled_at')
-        .eq('scheduled_slot_id', slot.id)
+        .eq('scheduled_slot_id', slot!.id)
         .eq('user_id', user.id)
         .in('status', ['assigned', 'scheduled']);
 
@@ -263,8 +296,8 @@ Deno.serve(async (req) => {
         checkDate.setDate(checkDate.getDate() + i);
 
         // For weekly slots, check if this day of week is active
-        if (slot.type === 'weekly' && slot.week_days) {
-          if (!slot.week_days.includes(checkDate.getDay())) {
+        if (slot!.type === 'weekly' && slot!.week_days) {
+          if (!slot!.week_days.includes(checkDate.getDay())) {
             continue;
           }
         }
@@ -298,7 +331,7 @@ Deno.serve(async (req) => {
         description: description,
         status: 'assigned',
         assigned_profile_id: matchedProfile.id,
-        scheduled_slot_id: slot.id,
+        scheduled_slot_id: slot?.id || null,
         scheduled_at: scheduledAtUtc.toISOString()
       })
       .select()
@@ -310,6 +343,10 @@ Deno.serve(async (req) => {
     }
 
     console.log('Content created:', content.id, 'Scheduled UTC:', scheduledAtUtc.toISOString());
+
+    // Extract hour/minute from scheduledAtWib for response
+    const responseHour = slot?.hour ?? scheduledAtWib.getHours();
+    const responseMinute = slot?.minute ?? scheduledAtWib.getMinutes();
 
     return new Response(
       JSON.stringify({
@@ -325,9 +362,9 @@ Deno.serve(async (req) => {
             platform: platform
           },
           schedule: {
-            slot_id: slot.id,
-            hour: slot.hour,
-            minute: slot.minute,
+            slot_id: slot?.id || null,
+            hour: responseHour,
+            minute: responseMinute,
             scheduled_at_utc: scheduledAtUtc.toISOString(),
             scheduled_at_wib: formatWib(scheduledAtUtc),
             timezone: 'UTC+7 (WIB)',

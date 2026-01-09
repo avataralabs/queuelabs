@@ -93,9 +93,38 @@ Deno.serve(async (req) => {
         continue
       }
 
+      // OPTIMISTIC LOCKING: Lock content BEFORE processing to prevent race condition
+      const { error: lockError, count: lockCount } = await supabase
+        .from('contents')
+        .update({ is_locked: true })
+        .eq('id', content.id)
+        .eq('is_locked', false) // Only update if not already locked
+        .eq('status', 'assigned') // Only update if still assigned
+
+      if (lockError) {
+        console.log(`Failed to lock content ${content.id}: ${lockError.message}`)
+        continue
+      }
+
+      // Verify lock was successful (count should be 1)
+      const { data: lockedContent } = await supabase
+        .from('contents')
+        .select('is_locked, status')
+        .eq('id', content.id)
+        .single()
+
+      if (!lockedContent?.is_locked || lockedContent.status !== 'assigned') {
+        console.log(`Content ${content.id} was not locked or status changed, skipping (likely processed by another instance)`)
+        continue
+      }
+
+      console.log(`🔒 Locked content ${content.id} for processing`)
+
       // Skip if profile not found
       if (!profile) {
-        console.log(`Skipping content ${content.id} - missing profile`)
+        // Release lock since we can't process
+        await supabase.from('contents').update({ is_locked: false }).eq('id', content.id)
+        console.log(`Skipping content ${content.id} - missing profile, lock released`)
         continue
       }
 
@@ -253,6 +282,14 @@ Deno.serve(async (req) => {
       } catch (processingError) {
         const errorMessage = processingError instanceof Error ? processingError.message : 'Unknown error'
         console.error(`Error processing content ${content.id}:`, processingError)
+        
+        // Release lock on error so content can be retried
+        await supabase
+          .from('contents')
+          .update({ is_locked: false })
+          .eq('id', content.id)
+        
+        console.log(`🔓 Released lock on content ${content.id} due to error`)
         
         results.push({
           content_id: content.id,

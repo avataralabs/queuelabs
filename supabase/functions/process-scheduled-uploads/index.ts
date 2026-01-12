@@ -109,19 +109,13 @@ Deno.serve(async (req) => {
         continue
       }
 
-      // Verify lock was successful (count should be 1)
-      const { data: lockedContent } = await supabase
-        .from('contents')
-        .select('is_locked, status')
-        .eq('id', content.id)
-        .single()
-
-      if (!lockedContent?.is_locked || lockedContent.status !== 'assigned') {
-        console.log(`Content ${content.id} was not locked or status changed, skipping (likely processed by another instance)`)
+      // CHECK COUNT - If 0, content was already locked by another instance
+      if (!lockCount || lockCount === 0) {
+        console.log(`⚠️ Content ${content.id} already locked by another instance (count: ${lockCount}), skipping to prevent double upload`)
         continue
       }
 
-      console.log(`🔒 Locked content ${content.id} for processing`)
+      console.log(`🔒 Successfully locked content ${content.id} (count: ${lockCount})`)
 
       // Skip if profile not found
       if (!profile) {

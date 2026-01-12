@@ -55,7 +55,9 @@ Deno.serve(async (req) => {
     console.log(`[${now.toISOString()}] Processing scheduled uploads...`)
 
     // Get all assigned contents where scheduled_at <= now and not locked
-    // Note: We fetch contents first, then fetch profile separately (no FK between contents and schedule_slots)
+    // Exclude contents that were attempted within the last 5 minutes (retry cooldown)
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000).toISOString()
+    
     const { data: assignedContents, error: fetchError } = await supabase
       .from('contents')
       .select(`
@@ -66,6 +68,7 @@ Deno.serve(async (req) => {
       .eq('is_locked', false)
       .not('scheduled_at', 'is', null)
       .lte('scheduled_at', now.toISOString())
+      .or(`upload_attempted_at.is.null,upload_attempted_at.lt.${fiveMinutesAgo}`)
 
     if (fetchError) {
       console.error('Error fetching assigned contents:', fetchError)
@@ -214,19 +217,31 @@ Deno.serve(async (req) => {
             throw updateError
           }
 
-          // Add to upload_history
-          const { error: historyError } = await supabase
+          // Check for duplicate history entry before inserting
+          const { data: recentSuccessHistory } = await supabase
             .from('upload_history')
-            .insert({
-              content_id: content.id,
-              profile_id: profile.id,
-              user_id: content.user_id,
-              status: 'success',
-              uploaded_at: now.toISOString()
-            })
+            .select('id')
+            .eq('content_id', content.id)
+            .gte('uploaded_at', fiveMinutesAgo)
+            .limit(1)
 
-          if (historyError) {
-            console.error(`Error adding to upload history:`, historyError)
+          if (recentSuccessHistory && recentSuccessHistory.length > 0) {
+            console.log(`Skipping history insert - recent entry exists for ${content.id}`)
+          } else {
+            // Add to upload_history
+            const { error: historyError } = await supabase
+              .from('upload_history')
+              .insert({
+                content_id: content.id,
+                profile_id: profile.id,
+                user_id: content.user_id,
+                status: 'success',
+                uploaded_at: now.toISOString()
+              })
+
+            if (historyError) {
+              console.error(`Error adding to upload history:`, historyError)
+            }
           }
 
           results.push({
@@ -238,13 +253,14 @@ Deno.serve(async (req) => {
           console.log(`✅ Content ${content.id} uploaded successfully and moved to trash`)
 
         } else {
-          // Failed - log error but don't lock
+          // Failed - release lock and log error
           const errorMessage = `Webhook returned ${webhookResponse.status}: ${responseText}`
           
           const { error: updateError } = await supabase
             .from('contents')
             .update({
               status: 'failed',
+              is_locked: false, // Release lock on failure
               upload_attempted_at: now.toISOString(),
               webhook_response: responseJson
             })
@@ -254,20 +270,32 @@ Deno.serve(async (req) => {
             console.error(`Error updating failed content ${content.id}:`, updateError)
           }
 
-          // Add to upload_history with error
-          const { error: historyError } = await supabase
+          // Check for duplicate history entry before inserting
+          const { data: recentHistory } = await supabase
             .from('upload_history')
-            .insert({
-              content_id: content.id,
-              profile_id: profile.id,
-              user_id: content.user_id,
-              status: 'failed',
-              error_message: errorMessage,
-              uploaded_at: now.toISOString()
-            })
+            .select('id')
+            .eq('content_id', content.id)
+            .gte('uploaded_at', fiveMinutesAgo)
+            .limit(1)
 
-          if (historyError) {
-            console.error(`Error adding to upload history:`, historyError)
+          if (recentHistory && recentHistory.length > 0) {
+            console.log(`Skipping history insert - recent entry exists for ${content.id}`)
+          } else {
+            // Add to upload_history with error
+            const { error: historyError } = await supabase
+              .from('upload_history')
+              .insert({
+                content_id: content.id,
+                profile_id: profile.id,
+                user_id: content.user_id,
+                status: 'failed',
+                error_message: errorMessage,
+                uploaded_at: now.toISOString()
+              })
+
+            if (historyError) {
+              console.error(`Error adding to upload history:`, historyError)
+            }
           }
 
           results.push({
@@ -276,7 +304,7 @@ Deno.serve(async (req) => {
             message: errorMessage
           })
 
-          console.log(`❌ Content ${content.id} upload failed: ${errorMessage}`)
+          console.log(`🔓❌ Content ${content.id} upload failed, lock released: ${errorMessage}`)
         }
 
       } catch (processingError) {

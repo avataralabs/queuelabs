@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
     
     const { count: releasedCount } = await supabase
       .from('contents')
-      .update({ is_locked: false })
+      .update({ is_locked: false }, { count: 'exact' })
       .eq('status', 'assigned')
       .eq('is_locked', true)
       .lt('scheduled_at', stuckLockThreshold)
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
       // OPTIMISTIC LOCKING: Lock content BEFORE processing to prevent race condition
       const { error: lockError, count: lockCount } = await supabase
         .from('contents')
-        .update({ is_locked: true })
+        .update({ is_locked: true }, { count: 'exact' })
         .eq('id', content.id)
         .eq('is_locked', false) // Only update if not already locked
         .eq('status', 'assigned') // Only update if still assigned

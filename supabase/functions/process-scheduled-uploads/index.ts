@@ -54,9 +54,23 @@ Deno.serve(async (req) => {
     
     console.log(`[${now.toISOString()}] Processing scheduled uploads...`)
 
+    // Auto-release stuck locks (locks older than 5 minutes past scheduled time)
+    const stuckLockThreshold = new Date(now.getTime() - 5 * 60 * 1000).toISOString()
+    
+    const { count: releasedCount } = await supabase
+      .from('contents')
+      .update({ is_locked: false })
+      .eq('status', 'assigned')
+      .eq('is_locked', true)
+      .lt('scheduled_at', stuckLockThreshold)
+    
+    if (releasedCount && releasedCount > 0) {
+      console.log(`🔓 Auto-released ${releasedCount} stuck locks`)
+    }
+
     // Get all assigned contents where scheduled_at <= now and not locked
     // Exclude contents that were attempted within the last 5 minutes (retry cooldown)
-    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000).toISOString()
+    const fiveMinutesAgo = stuckLockThreshold
     
     const { data: assignedContents, error: fetchError } = await supabase
       .from('contents')

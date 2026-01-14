@@ -516,14 +516,14 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                           const isManualMode = !content.scheduled_slot_id;
                           
                           return (
-                            <div key={content.id} className="p-4 rounded-lg bg-secondary/30">
-                              <div className="flex items-center gap-3">
+                            <div key={content.id} className="p-4 rounded-lg bg-secondary/30 overflow-hidden">
+                              <div className="flex items-center gap-3 overflow-hidden">
                                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                                   <FileVideo className="w-6 h-6 text-primary" />
                                 </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="font-medium truncate" title={content.file_name}>{content.file_name}</p>
-                                  <p className="text-sm text-muted-foreground truncate" title={content.caption || 'No caption'}>
+                                <div className="min-w-0 flex-1 overflow-hidden">
+                                  <p className="font-medium truncate block w-full" title={content.file_name}>{content.file_name}</p>
+                                  <p className="text-sm text-muted-foreground truncate block w-full" title={content.caption || 'No caption'}>
                                     {content.caption || 'No caption'}
                                   </p>
                                   {/* Show actual scheduled time */}

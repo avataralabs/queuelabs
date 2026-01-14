@@ -486,7 +486,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
         
         {/* Slot Action Dialog */}
         <Dialog open={!!selectedSlot} onOpenChange={() => setSelectedSlot(null)}>
-          <DialogContent className="glass border-border !max-w-[360px]">
+          <DialogContent className="glass border-border !max-w-[470px]">
             <DialogHeader>
               <DialogTitle>
                 {selectedSlot?.contents && selectedSlot.contents.length > 0 
@@ -506,7 +506,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                 
                 {selectedSlot.contents && selectedSlot.contents.length > 0 ? (
                   <div className="space-y-4 overflow-hidden">
-                    <div className="max-h-[300px] overflow-y-auto space-y-3">
+                    <div className="max-h-[390px] overflow-y-auto space-y-3">
                       {selectedSlot.contents.map(content => {
                         // Get actual scheduled time from content
                         const actualTime = content.scheduled_at 
@@ -523,10 +523,6 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                                 <p className="font-medium truncate text-sm" title={content.file_name}>{content.file_name}</p>
                                 <p className="text-xs text-muted-foreground truncate" title={content.caption || 'No caption'}>
                                   {content.caption || 'No caption'}
-                                </p>
-                                <p className="text-xs text-primary mt-1 flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  Scheduled: {actualTime}
                                 </p>
                               </div>
                             </div>
@@ -556,9 +552,6 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                       })}
                     </div>
                     
-                    <p className="text-xs text-muted-foreground">
-                      💡 Tip: Drag content to move to another slot
-                    </p>
                     
                     {/* Option to add more content */}
                     {pendingContents.length > 0 && (

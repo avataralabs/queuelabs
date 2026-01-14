@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useScheduleSlots } from '@/hooks/useScheduleSlots';
 import { useContents } from '@/hooks/useContents';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { format, isToday, isBefore } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { FileVideo, Calendar, Clock, Trash2, RotateCcw, GripVertical, Lock, CheckCircle } from 'lucide-react';
+import { FileVideo, Calendar, Clock, Trash2, RotateCcw, Lock, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TimelineGraphProps {
@@ -38,12 +38,6 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
     contents: typeof contents;
   } | null>(null);
   
-  const [draggedItem, setDraggedItem] = useState<typeof contents[0] | null>(null);
-  const [dragOverSlot, setDragOverSlot] = useState<{ date: Date; hour: number } | null>(null);
-  const [lastDroppedId, setLastDroppedId] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
-  const [isDragIntent, setIsDragIntent] = useState(false);
   
   // Filter slots by profileId AND platform
   const profileSlots = allSlots.filter(s => 
@@ -142,7 +136,6 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
   };
   
   const handleSlotClick = (date: Date, hour: number) => {
-    if (isDragging || draggedItem) return; // Don't open dialog while dragging
     
     const slotContents = getContentsForSlot(date, hour);
     const hasSlot = hasSlotAtHour(hour, date);
@@ -213,126 +206,8 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
     toast.success('Content unscheduled (back to pending)');
   };
   
-  // Drag and Drop handlers
-  const handleDragStart = useCallback((e: React.DragEvent<HTMLDivElement>, content: typeof contents[0]) => {
-    e.stopPropagation();
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', content.id);
-    
-    // Create transparent 1x1 image to hide default drag ghost
-    const emptyImg = document.createElement('img');
-    emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    e.dataTransfer.setDragImage(emptyImg, 0, 0);
-    
-    setIsDragIntent(true);
-    setIsDragging(true);
-    setDraggedItem(content);
-    setDragPosition({ x: e.clientX, y: e.clientY });
-  }, []);
-  
-  const handleDragEnd = useCallback(() => {
-    setIsDragging(false);
-    setDraggedItem(null);
-    setDragOverSlot(null);
-    setDragPosition(null);
-    setIsDragIntent(false);
-  }, []);
-  
-  const handleDrag = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    // Browser sends 0,0 at start and end of drag - ignore these
-    if (e.clientX === 0 && e.clientY === 0) return;
-    
-    requestAnimationFrame(() => {
-      setDragPosition({ x: e.clientX, y: e.clientY });
-    });
-  }, []);
-  
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, date: Date, hour: number) => {
-    e.preventDefault();
-    const slotTime = new Date(date);
-    slotTime.setHours(hour, 0, 0, 0);
-    
-    // Don't allow drop on past slots
-    if (isBefore(slotTime, new Date())) return;
-    
-    const hasSlot = hasSlotAtHour(hour, date);
-    if (!hasSlot) return;
-    
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverSlot({ date, hour });
-  };
-  
-  const handleDragLeave = () => {
-    setDragOverSlot(null);
-  };
-  
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>, date: Date, hour: number) => {
-    e.preventDefault();
-    setDragOverSlot(null);
-    
-    if (!draggedItem) return;
-    
-    const slotTime = new Date(date);
-    slotTime.setHours(hour, 0, 0, 0);
-    if (isBefore(slotTime, new Date())) return;
-    
-    const targetSlot = getSlotForHour(hour);
-    if (!targetSlot) return;
-    
-    // Check if dropping to the same slot and same date - skip if so
-    const sourceSlotId = draggedItem.scheduled_slot_id;
-    const sourceDate = draggedItem.scheduled_at ? new Date(draggedItem.scheduled_at) : null;
-    
-    if (sourceSlotId === targetSlot.id && sourceDate) {
-      const isSameDate = 
-        sourceDate.getFullYear() === date.getFullYear() &&
-        sourceDate.getMonth() === date.getMonth() &&
-        sourceDate.getDate() === date.getDate();
-      
-      if (isSameDate) {
-        setDraggedItem(null);
-        return; // Don't do anything if dropping to the same slot
-      }
-    }
-    
-    // Create new scheduled_at with target date and slot time
-    const newScheduledAt = new Date(date);
-    newScheduledAt.setHours(targetSlot.hour, targetSlot.minute, 0, 0);
-    
-    // Simply move to the new slot (allows stacking multiple contents)
-    updateContent.mutate({
-      id: draggedItem.id,
-      scheduled_slot_id: targetSlot.id,
-      scheduled_at: newScheduledAt.toISOString(),
-    });
-    
-    toast.success('Content moved');
-    setDraggedItem(null);
-    
-    // Success flash animation
-    setLastDroppedId(draggedItem.id);
-    setTimeout(() => setLastDroppedId(null), 1000);
-  };
-  
   return (
     <div className="space-y-3">
-      {/* Drag Indicator */}
-      {draggedItem && (
-        <div className="flex items-center justify-between p-3 rounded-lg bg-gradient-to-r from-primary/20 to-primary/10 border border-primary/40 shadow-md animate-fade-in">
-          <div className="flex items-center gap-3 text-primary">
-            <div className="w-8 h-8 rounded bg-primary/30 flex items-center justify-center">
-              <GripVertical className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-sm font-medium block">Moving: {draggedItem.file_name}</span>
-              <span className="text-xs text-muted-foreground">Drop on any available slot</span>
-            </div>
-          </div>
-          <Button variant="ghost" size="sm" onClick={handleDragEnd}>
-            Cancel
-          </Button>
-        </div>
-      )}
       
       <div className="glass rounded-xl border border-border overflow-hidden">
         {/* Date Headers */}
@@ -378,24 +253,17 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                 const slotTime = new Date(date);
                 slotTime.setHours(hour, 0, 0, 0);
                 const isPast = isBefore(slotTime, new Date());
-                const isDragOver = dragOverSlot?.date.toISOString() === date.toISOString() && dragOverSlot?.hour === hour;
-                const hasDraggedItemHere = slotContents.some(c => c.id === draggedItem?.id);
                 
                 return (
                   <div
                     key={`${date.toISOString()}-${hour}`}
                     onClick={() => handleSlotClick(date, hour)}
-                    onDragOver={(e) => handleDragOver(e, date, hour)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, date, hour)}
                     className={cn(
                       "min-h-[50px] border-l border-border/50 p-1 transition-all duration-200",
                       hasSlot && slotContents.length === 0 && !isPast && "bg-timeline-slot cursor-pointer hover:bg-timeline-slot-hover",
                       slotContents.length > 0 && "bg-timeline-slot-filled",
                       isPast && "opacity-50",
-                      isToday(date) && "bg-primary/5",
-                      isDragOver && !hasDraggedItemHere && "ring-2 ring-primary bg-primary/20 scale-[1.02] animate-pulse",
-                      isDragOver && slotContents.length > 0 && !hasDraggedItemHere && "ring-2 ring-amber-400 bg-amber-100/50 scale-[1.02] animate-pulse"
+                      isToday(date) && "bg-primary/5"
                     )}
                   >
                     {slotContents.length > 0 ? (
@@ -406,45 +274,31 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                         {slotContents.map((content) => {
                           const isLocked = content.is_locked || content.status === 'uploaded';
                           const isUploaded = content.status === 'uploaded';
-                          const canDrag = !isPast && !isLocked;
                           
                           return (
                             <div 
                               key={content.id}
-                              draggable={canDrag}
-                              title={isLocked ? (isUploaded ? 'Uploaded - cannot be modified' : 'Locked - cannot be modified') : 'Double-click to manage, drag to move'}
-                              onMouseDown={(e) => {
-                                if (isPast || isLocked) return;
-                                e.stopPropagation();
-                              }}
+                              title={isLocked ? (isUploaded ? 'Uploaded - cannot be modified' : 'Locked - cannot be modified') : 'Double-click to manage'}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (isDragIntent) {
-                                  setIsDragIntent(false);
-                                }
                               }}
                               onDoubleClick={(e) => {
-                                if (!isDragIntent && !isLocked) {
+                                if (!isLocked) {
                                   handleContentDoubleClick(e, date, hour, slotContents);
                                 }
                               }}
-                              onDragStart={(e) => canDrag && handleDragStart(e, content)}
-                              onDrag={canDrag ? handleDrag : undefined}
-                              onDragEnd={canDrag ? handleDragEnd : undefined}
                               style={{ 
-                                cursor: isLocked ? 'not-allowed' : isPast ? 'default' : isDragging && draggedItem?.id === content.id ? 'grabbing' : 'grab',
+                                cursor: isLocked ? 'not-allowed' : isPast ? 'default' : 'pointer',
                                 WebkitUserSelect: 'none',
                                 userSelect: 'none'
                               }}
                               className={cn(
-                                "rounded-md p-1.5 text-xs transition-all duration-200 overflow-hidden touch-none",
+                                "rounded-md p-1.5 text-xs transition-all duration-200 overflow-hidden",
                                 isUploaded 
                                   ? "bg-green-500/20 border border-green-500/40" 
                                   : isLocked 
                                     ? "bg-muted border border-muted-foreground/30 opacity-70" 
-                                    : "bg-primary/20 border border-primary/30 hover:bg-primary/30",
-                                draggedItem?.id === content.id && "opacity-30 scale-90 ring-2 ring-dashed ring-primary/50 bg-primary/10",
-                                lastDroppedId === content.id && "animate-pulse ring-2 ring-green-500 bg-green-100 dark:bg-green-900/30"
+                                    : "bg-primary/20 border border-primary/30 hover:bg-primary/30"
                               )}
                             >
                               <div className="flex items-center gap-1">
@@ -453,7 +307,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                                 ) : isLocked ? (
                                   <Lock className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                                 ) : (
-                                  <GripVertical className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                                  <FileVideo className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                                 )}
                                 <p className="font-medium truncate flex-1" title={content.file_name}>
                                   {content.file_name.length > 10 
@@ -605,21 +459,6 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
           </DialogContent>
         </Dialog>
         
-        {/* Custom Drag Indicator */}
-        {isDragging && draggedItem && dragPosition && (
-          <div 
-            className="fixed z-[99999] pointer-events-none bg-primary text-primary-foreground px-3 py-2 rounded-lg shadow-2xl text-sm font-medium flex items-center gap-2"
-            style={{ 
-              left: dragPosition.x + 15, 
-              top: dragPosition.y + 15,
-            }}
-          >
-            <FileVideo className="w-4 h-4" />
-            {draggedItem.file_name.length > 20 
-              ? draggedItem.file_name.slice(0, 20) + '...' 
-              : draggedItem.file_name}
-          </div>
-        )}
       </div>
     </div>
   );

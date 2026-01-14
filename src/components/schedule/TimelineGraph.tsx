@@ -496,7 +496,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
             </DialogHeader>
             
             {selectedSlot && (
-              <div className="space-y-4 pt-4">
+              <div className="space-y-4 pt-4 overflow-hidden">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Calendar className="w-4 h-4" />
                   <span>{format(selectedSlot.date, 'EEEE, MMMM d')}</span>
@@ -505,7 +505,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                 </div>
                 
                 {selectedSlot.contents && selectedSlot.contents.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="space-y-4 overflow-hidden">
                     <ScrollArea className="max-h-[300px] w-full overflow-hidden">
                       <div className="space-y-3 w-full">
                         {selectedSlot.contents.map(content => {
@@ -516,12 +516,12 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                           const isManualMode = !content.scheduled_slot_id;
                           
                           return (
-                            <div key={content.id} className="p-4 rounded-lg bg-secondary/30 overflow-hidden w-full">
-                              <div className="flex items-center gap-3 overflow-hidden">
+                            <div key={content.id} className="p-4 rounded-lg bg-secondary/30 overflow-hidden">
+                              <div className="flex items-center gap-3 overflow-hidden w-full">
                                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                                   <FileVideo className="w-6 h-6 text-primary" />
                                 </div>
-                                <div className="min-w-0 flex-1 overflow-hidden max-w-[calc(100%-60px)]">
+                                <div className="min-w-0 flex-1 overflow-hidden">
                                   <p className="font-medium truncate" title={content.file_name}>{content.file_name}</p>
                                   <p className="text-sm text-muted-foreground truncate" title={content.caption || 'No caption'}>
                                     {content.caption || 'No caption'}
@@ -534,7 +534,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                                 </div>
                               </div>
                               
-                              <div className="grid grid-cols-2 gap-2 mt-3">
+                              <div className="grid grid-cols-2 gap-2 mt-3 w-full">
                                 <Button 
                                   variant="outline"
                                   size="sm"

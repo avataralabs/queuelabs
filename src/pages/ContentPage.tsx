@@ -511,7 +511,7 @@ export default function ContentPage() {
                               {format(new Date(content.uploaded_at), "MMM d, yyyy HH:mm")}
                             </p>
                             {content.caption && (
-                              <p className="text-sm text-muted-foreground truncate mt-1">{content.caption}</p>
+                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2 break-words">{content.caption}</p>
                             )}
                           </div>
                         </div>
@@ -609,7 +609,7 @@ export default function ContentPage() {
                               )}
                               {/* Caption - same as Pending tab */}
                               {content.caption && (
-                                <p className="text-sm text-muted-foreground truncate mt-1">{content.caption}</p>
+                                <p className="text-sm text-muted-foreground mt-1 line-clamp-2 break-words">{content.caption}</p>
                               )}
                             </div>
                           </div>

@@ -514,20 +514,20 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                           : `${selectedSlot.hour.toString().padStart(2, '0')}:00`;
                         
                         return (
-                          <div key={content.id} className="p-3 rounded-lg bg-secondary/30 overflow-hidden">
-                            <div className="flex items-center gap-2 overflow-hidden">
+                          <div key={content.id} className="p-2 rounded-lg bg-secondary/30 overflow-hidden">
+                            <div className="flex items-start gap-2 overflow-hidden">
                               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                                 <FileVideo className="w-5 h-5 text-primary" />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="font-medium truncate text-sm" title={content.file_name}>{content.file_name}</p>
-                                <p className="text-xs text-muted-foreground truncate" title={content.caption || 'No caption'}>
+                                <p className="font-medium truncate text-sm leading-tight" title={content.file_name}>{content.file_name}</p>
+                                <p className="text-xs text-muted-foreground line-clamp-2 leading-tight" title={content.caption || 'No caption'}>
                                   {content.caption || 'No caption'}
                                 </p>
                               </div>
                             </div>
                             
-                            <div className="flex gap-2 mt-3 overflow-hidden">
+                            <div className="flex gap-2 mt-2 overflow-hidden">
                               <Button 
                                 variant="outline"
                                 size="sm"

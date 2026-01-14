@@ -486,7 +486,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
         
         {/* Slot Action Dialog */}
         <Dialog open={!!selectedSlot} onOpenChange={() => setSelectedSlot(null)}>
-          <DialogContent className="glass border-border w-full max-w-sm sm:max-w-[400px] overflow-hidden">
+          <DialogContent className="glass border-border w-full max-w-sm sm:max-w-[400px] overflow-hidden box-border">
             <DialogHeader>
               <DialogTitle>
                 {selectedSlot?.contents && selectedSlot.contents.length > 0 
@@ -496,18 +496,18 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
             </DialogHeader>
             
             {selectedSlot && (
-              <div className="space-y-4 pt-4 overflow-hidden">
+              <div className="space-y-4 pt-4 overflow-hidden w-full">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Calendar className="w-4 h-4" />
+                  <Calendar className="w-4 h-4 flex-shrink-0" />
                   <span>{format(selectedSlot.date, 'EEEE, MMMM d')}</span>
-                  <Clock className="w-4 h-4 ml-2" />
+                  <Clock className="w-4 h-4 ml-2 flex-shrink-0" />
                   <span>{selectedSlot.hour.toString().padStart(2, '0')}:00</span>
                 </div>
                 
                 {selectedSlot.contents && selectedSlot.contents.length > 0 ? (
-                  <div className="space-y-4 overflow-hidden">
-                    <ScrollArea className="max-h-[300px]">
-                      <div className="space-y-3 pr-4">
+                  <div className="space-y-4 overflow-hidden w-full">
+                    <ScrollArea className="max-h-[300px] w-full">
+                      <div className="space-y-3 pr-4 w-full box-border">
                         {selectedSlot.contents.map(content => {
                           // Get actual scheduled time from content
                           const actualTime = content.scheduled_at 
@@ -516,42 +516,42 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                           const isManualMode = !content.scheduled_slot_id;
                           
                           return (
-                            <div key={content.id} className="p-3 rounded-lg bg-secondary/30 overflow-hidden">
-                              <div className="flex items-center gap-2 overflow-hidden">
+                            <div key={content.id} className="p-3 rounded-lg bg-secondary/30 overflow-hidden w-full box-border">
+                              <div className="flex items-center gap-2 w-full overflow-hidden">
                                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                                   <FileVideo className="w-5 h-5 text-primary" />
                                 </div>
-                                <div className="min-w-0 flex-1 overflow-hidden">
+                                <div className="min-w-0 flex-1 overflow-hidden" style={{ maxWidth: 'calc(100% - 48px)' }}>
                                   <p className="font-medium truncate text-sm" title={content.file_name}>{content.file_name}</p>
                                   <p className="text-xs text-muted-foreground truncate" title={content.caption || 'No caption'}>
                                     {content.caption || 'No caption'}
                                   </p>
                                   {/* Show actual scheduled time */}
                                   <p className="text-xs text-primary mt-1 flex items-center gap-1">
-                                    <Clock className="w-3 h-3" />
+                                    <Clock className="w-3 h-3 flex-shrink-0" />
                                     Scheduled: {actualTime}
                                   </p>
                                 </div>
                               </div>
                               
-                              <div className="flex gap-2 mt-3">
+                              <div className="flex gap-2 mt-3 w-full">
                                 <Button 
                                   variant="outline"
                                   size="sm"
-                                  className="flex-1"
+                                  className="flex-1 min-w-0"
                                   onClick={() => handleUnschedule(content.id)}
                                 >
-                                  <RotateCcw className="w-3 h-3 mr-1" />
-                                  Unschedule
+                                  <RotateCcw className="w-3 h-3 mr-1 flex-shrink-0" />
+                                  <span className="truncate">Unschedule</span>
                                 </Button>
                                 <Button 
                                   variant="destructive"
                                   size="sm"
-                                  className="flex-1"
+                                  className="flex-1 min-w-0"
                                   onClick={() => handleRemoveFromSchedule(content.id)}
                                 >
-                                  <Trash2 className="w-3 h-3 mr-1" />
-                                  Remove
+                                  <Trash2 className="w-3 h-3 mr-1 flex-shrink-0" />
+                                  <span className="truncate">Remove</span>
                                 </Button>
                               </div>
                             </div>

@@ -506,8 +506,8 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                 
                 {selectedSlot.contents && selectedSlot.contents.length > 0 ? (
                   <div className="space-y-4 overflow-hidden">
-                    <ScrollArea className="max-h-[300px] w-full overflow-hidden">
-                      <div className="space-y-3 w-full">
+                    <ScrollArea className="max-h-[300px]">
+                      <div className="space-y-3 pr-4">
                         {selectedSlot.contents.map(content => {
                           // Get actual scheduled time from content
                           const actualTime = content.scheduled_at 
@@ -516,14 +516,14 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                           const isManualMode = !content.scheduled_slot_id;
                           
                           return (
-                            <div key={content.id} className="p-4 rounded-lg bg-secondary/30 overflow-hidden">
-                              <div className="flex items-center gap-3 overflow-hidden w-full">
-                                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                  <FileVideo className="w-6 h-6 text-primary" />
+                            <div key={content.id} className="p-3 rounded-lg bg-secondary/30 overflow-hidden">
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                  <FileVideo className="w-5 h-5 text-primary" />
                                 </div>
                                 <div className="min-w-0 flex-1 overflow-hidden">
-                                  <p className="font-medium truncate" title={content.file_name}>{content.file_name}</p>
-                                  <p className="text-sm text-muted-foreground truncate" title={content.caption || 'No caption'}>
+                                  <p className="font-medium truncate text-sm" title={content.file_name}>{content.file_name}</p>
+                                  <p className="text-xs text-muted-foreground truncate" title={content.caption || 'No caption'}>
                                     {content.caption || 'No caption'}
                                   </p>
                                   {/* Show actual scheduled time */}
@@ -534,10 +534,11 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                                 </div>
                               </div>
                               
-                              <div className="grid grid-cols-2 gap-2 mt-3 w-full">
+                              <div className="flex gap-2 mt-3">
                                 <Button 
                                   variant="outline"
                                   size="sm"
+                                  className="flex-1"
                                   onClick={() => handleUnschedule(content.id)}
                                 >
                                   <RotateCcw className="w-3 h-3 mr-1" />
@@ -546,6 +547,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                                 <Button 
                                   variant="destructive"
                                   size="sm"
+                                  className="flex-1"
                                   onClick={() => handleRemoveFromSchedule(content.id)}
                                 >
                                   <Trash2 className="w-3 h-3 mr-1" />

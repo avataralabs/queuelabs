@@ -273,15 +273,6 @@ export default function HistoryPage() {
                     </div>
                     
                     <div className="flex items-center gap-3">
-                      <span className={cn(
-                        "px-3 py-1 rounded-full text-xs",
-                        entry.status === 'success' 
-                          ? "bg-success/10 text-success" 
-                          : "bg-destructive/10 text-destructive"
-                      )}>
-                        {entry.status === 'success' ? 'Uploaded' : 'Failed'}
-                      </span>
-                      
                       {entry.contents?.file_url && (
                         <Button
                           size="sm"
@@ -293,6 +284,15 @@ export default function HistoryPage() {
                           Assign
                         </Button>
                       )}
+                      
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-xs",
+                        entry.status === 'success' 
+                          ? "bg-success/10 text-success" 
+                          : "bg-destructive/10 text-destructive"
+                      )}>
+                        {entry.status === 'success' ? 'Uploaded' : 'Failed'}
+                      </span>
                       
                       {entry.error_message && (
                         <p className="text-xs text-destructive max-w-[200px] truncate" title={entry.error_message}>

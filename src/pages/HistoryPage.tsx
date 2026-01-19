@@ -253,20 +253,18 @@ export default function HistoryPage() {
                       )}
                       
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium truncate">
-                            {content?.file_name || 'Unknown content'}
-                          </p>
+                        <p className="font-medium truncate max-w-[200px] sm:max-w-[300px] md:max-w-[400px]">
+                          {content?.file_name || 'Unknown content'}
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                           <span className={cn(
-                            "px-2 py-0.5 rounded-full text-xs flex-shrink-0",
+                            "px-1.5 py-0.5 rounded text-xs flex-shrink-0",
                             entry.status === 'success' 
                               ? "bg-success/10 text-success" 
                               : "bg-destructive/10 text-destructive"
                           )}>
                             {entry.status === 'success' ? 'Uploaded' : 'Failed'}
                           </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           {contentPlatform && (
                             <>
                               <PlatformIcon platform={contentPlatform as Platform} className="w-4 h-4" />
@@ -276,7 +274,7 @@ export default function HistoryPage() {
                             </>
                           )}
                           <span>
-                            • {format(new Date(entry.uploaded_at), 'MMM d, HH:mm')}
+                            {contentPlatform ? '• ' : ''}{format(new Date(entry.uploaded_at), 'MMM d, HH:mm')}
                           </span>
                         </div>
                       </div>

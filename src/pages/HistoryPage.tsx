@@ -252,52 +252,47 @@ export default function HistoryPage() {
                         </div>
                       )}
                       
-                      <div>
-                        <p className="font-medium">
-                          {content?.file_name || 'Unknown content'}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium truncate">
+                            {content?.file_name || 'Unknown content'}
+                          </p>
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-full text-xs flex-shrink-0",
+                            entry.status === 'success' 
+                              ? "bg-success/10 text-success" 
+                              : "bg-destructive/10 text-destructive"
+                          )}>
+                            {entry.status === 'success' ? 'Uploaded' : 'Failed'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           {contentPlatform && (
                             <>
-                              <PlatformIcon platform={contentPlatform as Platform} className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-sm text-muted-foreground">
+                              <PlatformIcon platform={contentPlatform as Platform} className="w-4 h-4" />
+                              <span>
                                 {formatUsername(connectedAccount?.username || profile?.name || '')}
                               </span>
                             </>
                           )}
-                          <span className="text-sm text-muted-foreground">
+                          <span>
                             • {format(new Date(entry.uploaded_at), 'MMM d, HH:mm')}
                           </span>
                         </div>
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
                       {entry.contents?.file_url && (
                         <Button
-                          size="sm"
                           variant="outline"
+                          size="sm"
                           onClick={() => openAssignDialog(entry)}
-                          className="gap-1"
+                          className="gap-1.5"
                         >
-                          <Send className="w-3 h-3" />
+                          <Send className="w-4 h-4" />
                           Assign
                         </Button>
-                      )}
-                      
-                      <span className={cn(
-                        "px-3 py-1 rounded-full text-xs",
-                        entry.status === 'success' 
-                          ? "bg-success/10 text-success" 
-                          : "bg-destructive/10 text-destructive"
-                      )}>
-                        {entry.status === 'success' ? 'Uploaded' : 'Failed'}
-                      </span>
-                      
-                      {entry.error_message && (
-                        <p className="text-xs text-destructive max-w-[200px] truncate" title={entry.error_message}>
-                          {entry.error_message}
-                        </p>
                       )}
                     </div>
                   </div>

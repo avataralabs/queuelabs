@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useUploadHistory, UploadHistoryWithDetails, ConnectedAccount } from '@/hooks/useUploadHistory';
-import { useProfiles } from '@/hooks/useProfiles';
+import { useProfiles, type Profile, type Platform } from '@/hooks/useProfiles';
+import { useScheduleSlots } from '@/hooks/useScheduleSlots';
+import { useContents } from '@/hooks/useContents';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PlatformIcon } from '@/components/common/PlatformIcon';
+import { Button } from '@/components/ui/button';
 import { 
   Select,
   SelectContent,
@@ -10,16 +13,39 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { format } from 'date-fns';
-import { History, FileVideo, CheckCircle, XCircle, Filter, Loader2 } from 'lucide-react';
+import { History, FileVideo, CheckCircle, XCircle, Filter, Loader2, Send, Clock } from 'lucide-react';
 import { cn, formatUsername } from '@/lib/utils';
-import type { Platform } from '@/hooks/useProfiles';
+import { useToast } from '@/hooks/use-toast';
+
+type SelectedSlot = {
+  slotId: string;
+  profileId: string;
+  platform: string;
+  accountUsername: string;
+};
 
 export default function HistoryPage() {
   const { history, isLoading } = useUploadHistory();
   const { profiles } = useProfiles();
+  const { slots } = useScheduleSlots();
+  const { addContent } = useContents();
+  const { toast } = useToast();
+  
   const [filterProfileId, setFilterProfileId] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<UploadHistoryWithDetails | null>(null);
+  const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
+  const [isAssigning, setIsAssigning] = useState(false);
   
   const filteredHistory = useMemo(() => {
     return history
@@ -32,6 +58,71 @@ export default function HistoryPage() {
     success: history.filter(h => h.status === 'success').length,
     failed: history.filter(h => h.status === 'failed').length,
   }), [history]);
+  
+  // Group slots by profile
+  const profilesWithSlots = useMemo(() => {
+    return profiles
+      .filter(p => p.connected_accounts && p.connected_accounts.length > 0)
+      .map(profile => ({
+        profile,
+        accounts: (profile.connected_accounts || []).map(acc => ({
+          ...acc,
+          slots: slots.filter(s => s.profile_id === profile.id && s.platform === acc.platform && s.is_active)
+        })).filter(acc => acc.slots.length > 0)
+      }))
+      .filter(p => p.accounts.length > 0);
+  }, [profiles, slots]);
+  
+  const openAssignDialog = (entry: UploadHistoryWithDetails) => {
+    setSelectedEntry(entry);
+    setSelectedSlots([]);
+    setAssignDialogOpen(true);
+  };
+  
+  const toggleSlot = (slotId: string, profileId: string, platform: string, accountUsername: string) => {
+    setSelectedSlots(prev => {
+      const exists = prev.find(s => s.slotId === slotId);
+      if (exists) {
+        return prev.filter(s => s.slotId !== slotId);
+      }
+      return [...prev, { slotId, profileId, platform, accountUsername }];
+    });
+  };
+  
+  const handleAssign = async () => {
+    if (!selectedEntry?.contents || selectedSlots.length === 0) return;
+    
+    setIsAssigning(true);
+    try {
+      for (const slot of selectedSlots) {
+        const slotData = slots.find(s => s.id === slot.slotId);
+        if (!slotData) continue;
+        
+        await addContent.mutateAsync({
+          file_name: selectedEntry.contents.file_name,
+          file_url: selectedEntry.contents.file_url,
+          platform: slot.platform,
+          status: 'pending',
+          assigned_profile_id: slot.profileId,
+          scheduled_slot_id: slot.slotId
+        });
+      }
+      
+      toast({
+        title: 'Content assigned',
+        description: `Assigned to ${selectedSlots.length} slot(s) successfully`
+      });
+      setAssignDialogOpen(false);
+    } catch (error) {
+      toast({
+        title: 'Failed to assign',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsAssigning(false);
+    }
+  };
   
   return (
     <MainLayout>
@@ -181,7 +272,7 @@ export default function HistoryPage() {
                       </div>
                     </div>
                     
-                    <div className="text-right">
+                    <div className="flex items-center gap-3">
                       <span className={cn(
                         "px-3 py-1 rounded-full text-xs",
                         entry.status === 'success' 
@@ -190,8 +281,21 @@ export default function HistoryPage() {
                       )}>
                         {entry.status === 'success' ? 'Uploaded' : 'Failed'}
                       </span>
+                      
+                      {entry.contents?.file_url && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openAssignDialog(entry)}
+                          className="gap-1"
+                        >
+                          <Send className="w-3 h-3" />
+                          Assign
+                        </Button>
+                      )}
+                      
                       {entry.error_message && (
-                        <p className="text-xs text-destructive mt-1 max-w-[200px] truncate" title={entry.error_message}>
+                        <p className="text-xs text-destructive max-w-[200px] truncate" title={entry.error_message}>
                           {entry.error_message}
                         </p>
                       )}
@@ -202,6 +306,90 @@ export default function HistoryPage() {
             </div>
           )}
         </div>
+        
+        {/* Assign Dialog */}
+        <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Assign to Schedule Slot</DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4 max-h-[400px] overflow-y-auto py-2">
+              {selectedEntry?.contents && (
+                <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                  <p className="text-sm font-medium truncate">{selectedEntry.contents.file_name}</p>
+                </div>
+              )}
+              
+              {profilesWithSlots.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No active schedule slots available</p>
+                  <p className="text-sm mt-1">Create schedule slots first</p>
+                </div>
+              ) : (
+                profilesWithSlots.map(({ profile, accounts }) => (
+                  <div key={profile.id} className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">{profile.name}</p>
+                    {accounts.map(account => (
+                      <div key={`${profile.id}-${account.platform}`} className="space-y-1">
+                        <div className="flex items-center gap-2 text-sm">
+                          <PlatformIcon platform={account.platform as Platform} size="sm" />
+                          <span>{formatUsername(account.username)}</span>
+                        </div>
+                        <div className="pl-6 space-y-1">
+                          {account.slots.map(slot => {
+                            const isSelected = selectedSlots.some(s => s.slotId === slot.id);
+                            return (
+                              <label
+                                key={slot.id}
+                                className={cn(
+                                  "flex items-center gap-2 p-2 rounded cursor-pointer transition-colors",
+                                  isSelected ? "bg-primary/10" : "hover:bg-secondary/50"
+                                )}
+                              >
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={() => toggleSlot(slot.id, profile.id, account.platform, account.username)}
+                                />
+                                <Clock className="w-3 h-3 text-muted-foreground" />
+                                <span className="text-sm">
+                                  {String(slot.hour).padStart(2, '0')}:{String(slot.minute).padStart(2, '0')}
+                                  {slot.week_days && slot.week_days.length < 7 && (
+                                    <span className="text-muted-foreground ml-1">
+                                      ({slot.week_days.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ')})
+                                    </span>
+                                  )}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleAssign} 
+                disabled={selectedSlots.length === 0 || isAssigning}
+              >
+                {isAssigning ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4 mr-1" />
+                )}
+                Assign ({selectedSlots.length})
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );

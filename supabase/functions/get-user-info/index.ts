@@ -6,8 +6,79 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// WIB timezone utilities (consistent with assign-content API)
+const WIB_OFFSET_HOURS = 7;
+const WIB_OFFSET_MS = WIB_OFFSET_HOURS * 60 * 60 * 1000;
+
+function nowInWib(): Date {
+  const now = new Date();
+  return new Date(now.getTime() + WIB_OFFSET_MS);
+}
+
+function formatWib(date: Date): string {
+  return date.toISOString().replace('T', ' ').substring(0, 19) + ' WIB';
+}
+
+interface Slot {
+  id: string;
+  hour: number;
+  minute: number;
+  type: string;
+  week_days: number[] | null;
+  profile_id: string;
+  platform: string;
+}
+
+interface ScheduledContent {
+  scheduled_at: string;
+  scheduled_slot_id: string;
+}
+
+// Find next available slot+date (consistent with assign-content API)
+function findNextAvailableSlot(
+  slots: Slot[],
+  occupiedMap: Map<string, Set<string>>,
+  nowWib: Date
+): { slot: Slot; scheduledAtWib: Date } | null {
+  
+  const sortedSlots = [...slots].sort((a, b) => {
+    if (a.hour !== b.hour) return a.hour - b.hour;
+    return a.minute - b.minute;
+  });
+  
+  for (let dayOffset = 0; dayOffset < 365; dayOffset++) {
+    const checkDate = new Date(nowWib);
+    checkDate.setDate(checkDate.getDate() + dayOffset);
+    checkDate.setHours(0, 0, 0, 0);
+    
+    const dayOfWeek = checkDate.getDay();
+    
+    for (const slot of sortedSlots) {
+      if (slot.type === 'weekly' && slot.week_days) {
+        if (!slot.week_days.includes(dayOfWeek)) continue;
+      }
+      
+      if (dayOffset === 0) {
+        const slotTimeWib = new Date(checkDate);
+        slotTimeWib.setHours(slot.hour, slot.minute, 0, 0);
+        if (nowWib >= slotTimeWib) continue;
+      }
+      
+      const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
+      const occupiedDates = occupiedMap.get(slot.id);
+      if (occupiedDates?.has(dateKey)) continue;
+      
+      const scheduledAtWib = new Date(checkDate);
+      scheduledAtWib.setHours(slot.hour, slot.minute, 0, 0);
+      
+      return { slot, scheduledAtWib };
+    }
+  }
+  
+  return null;
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -25,7 +96,6 @@ serve(async (req) => {
 
     console.log('Fetching user info for:', username);
 
-    // Create Supabase client with service role for admin access
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -63,7 +133,7 @@ serve(async (req) => {
       .select('*')
       .eq('user_id', user.id);
 
-    // 4. Get schedule slots
+    // 4. Get ALL schedule slots for user
     const { data: scheduleSlots } = await supabaseAdmin
       .from('schedule_slots')
       .select('*')
@@ -74,7 +144,7 @@ serve(async (req) => {
     // 5. Get contents summary
     const { data: contents } = await supabaseAdmin
       .from('contents')
-      .select('id, status')
+      .select('id, status, scheduled_at, scheduled_slot_id')
       .eq('user_id', user.id);
 
     // 6. Get scheduled contents (upcoming)
@@ -92,12 +162,38 @@ serve(async (req) => {
       .select('id, status')
       .eq('user_id', user.id);
 
-    // Build accounts array with schedule slots (matching screenshot format)
+    // Build occupied map for all slots (scheduled content)
+    const occupiedMap = new Map<string, Set<string>>();
+    (contents || []).forEach(c => {
+      if (!c.scheduled_at || !c.scheduled_slot_id) return;
+      if (!['assigned', 'scheduled'].includes(c.status)) return;
+      
+      const utcDate = new Date(c.scheduled_at);
+      const wibDate = new Date(utcDate.getTime() + WIB_OFFSET_MS);
+      const dateKey = `${wibDate.getFullYear()}-${wibDate.getMonth()}-${wibDate.getDate()}`;
+      
+      if (!occupiedMap.has(c.scheduled_slot_id)) {
+        occupiedMap.set(c.scheduled_slot_id, new Set());
+      }
+      occupiedMap.get(c.scheduled_slot_id)!.add(dateKey);
+    });
+
+    const nowWib = nowInWib();
+
+    // Build accounts array with schedule slots AND next available slot
     const accounts: Array<{
       platform: string;
       username: string;
       profile_name: string;
-      schedule_slots: Array<{ hour: number; minute: number; type: string }>;
+      profile_id: string;
+      schedule_slots: Array<{ id: string; hour: number; minute: number; type: string; week_days: number[] | null }>;
+      next_available_slot: {
+        slot_id: string;
+        hour: number;
+        minute: number;
+        scheduled_at_wib: string;
+        scheduled_at_utc: string;
+      } | null;
     }> = [];
 
     // Process each profile and its connected accounts
@@ -107,18 +203,46 @@ serve(async (req) => {
       for (const account of connectedAccounts) {
         // Get slots for this profile and platform
         const platformSlots = (scheduleSlots || [])
-          .filter(slot => slot.profile_id === profile.id && slot.platform === account.platform)
-          .map(slot => ({
-            hour: slot.hour,
-            minute: slot.minute,
-            type: slot.type || 'daily'
-          }));
+          .filter(slot => slot.profile_id === profile.id && slot.platform === account.platform);
+
+        const slotsFormatted = platformSlots.map(slot => ({
+          id: slot.id,
+          hour: slot.hour,
+          minute: slot.minute,
+          type: slot.type || 'daily',
+          week_days: slot.week_days
+        }));
+
+        // Find next available slot for this profile+platform
+        let nextAvailable: {
+          slot_id: string;
+          hour: number;
+          minute: number;
+          scheduled_at_wib: string;
+          scheduled_at_utc: string;
+        } | null = null;
+
+        if (platformSlots.length > 0) {
+          const result = findNextAvailableSlot(platformSlots as Slot[], occupiedMap, nowWib);
+          if (result) {
+            const utcDate = new Date(result.scheduledAtWib.getTime() - WIB_OFFSET_MS);
+            nextAvailable = {
+              slot_id: result.slot.id,
+              hour: result.slot.hour,
+              minute: result.slot.minute,
+              scheduled_at_wib: formatWib(result.scheduledAtWib),
+              scheduled_at_utc: utcDate.toISOString()
+            };
+          }
+        }
 
         accounts.push({
           platform: account.platform,
           username: account.username || account.display_name || '',
           profile_name: profile.name,
-          schedule_slots: platformSlots
+          profile_id: profile.id,
+          schedule_slots: slotsFormatted,
+          next_available_slot: nextAvailable
         });
       }
     }
@@ -162,6 +286,10 @@ serve(async (req) => {
           total: uploadHistory?.length || 0,
           success_count: uploadHistory?.filter(h => h.status === 'success').length || 0,
           failed_count: uploadHistory?.filter(h => h.status === 'failed').length || 0
+        },
+        server_time: {
+          utc: new Date().toISOString(),
+          wib: formatWib(nowWib)
         }
       }
     };

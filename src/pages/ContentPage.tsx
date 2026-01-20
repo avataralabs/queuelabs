@@ -1,30 +1,50 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { PlatformBadge } from "@/components/common/PlatformBadge";
 import { PlatformIcon } from "@/components/common/PlatformIcon";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProfiles, Platform, ConnectedAccount } from "@/hooks/useProfiles";
 import { useContents } from "@/hooks/useContents";
-import { useScheduleSlots } from "@/hooks/useScheduleSlots";
+import { useScheduleSlots, type ScheduleSlot } from "@/hooks/useScheduleSlots";
+import { useScheduledContents } from "@/hooks/useScheduledContents";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, AlertCircle, Check } from "lucide-react";
-import { format } from "date-fns";
+import { Upload, FileVideo, Trash2, Send, Calendar, CloudUpload, Clock, Loader2 } from "lucide-react";
+import { format, addDays, startOfDay } from "date-fns";
 import { cn, formatUsername } from "@/lib/utils";
 import { toast } from "sonner";
 
-interface SelectedSlot {
-  profileId: string;
-  slotId: string;
+type SelectedPlatform = {
   platform: string;
-  username: string;
-  time: string;
-  profilePicture?: string;
+  profileId: string;
+  profileName: string;
+  accountUsername: string;
+};
+
+// WIB timezone utilities
+const getNowWib = () => {
+  const now = new Date();
+  const wibOffset = 7 * 60;
+  const utcOffset = now.getTimezoneOffset();
+  return new Date(now.getTime() + (wibOffset + utcOffset) * 60 * 1000);
+};
+
+const wibToUtc = (date: Date): Date => {
+  const wibOffset = 7 * 60;
+  return new Date(date.getTime() - wibOffset * 60 * 1000);
+};
+
+interface NextAvailableSlot {
+  slotId: string;
+  profileId: string;
+  scheduledAt: Date;
+  displayDate: Date;
+  hour: number;
+  minute: number;
 }
 
 export default function ContentPage() {
@@ -34,6 +54,7 @@ export default function ContentPage() {
   const { profiles, isLoading: profilesLoading } = useProfiles();
   const { contents, isLoading: contentsLoading, addContent, updateContent, deleteContent, uploadFile } = useContents();
   const { slots, isLoading: slotsLoading } = useScheduleSlots();
+  const { scheduledContents } = useScheduledContents();
 
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null);
@@ -44,9 +65,10 @@ export default function ContentPage() {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState("pending");
+  const [isAssigning, setIsAssigning] = useState(false);
 
-  // Multi-select state
-  const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
+  // Multi-select state - new platform-based selection
+  const [selectedPlatforms, setSelectedPlatforms] = useState<SelectedPlatform[]>([]);
 
   // Filter states for assign dialog
   const [dialogProfileFilter, setDialogProfileFilter] = useState<string>("all");
@@ -58,49 +80,119 @@ export default function ContentPage() {
 
   const getProfileById = (id?: string | null) => profiles.find((p) => p.id === id);
 
-  // Get all active slots for a profile+platform combination
-  const getSlotsByProfilePlatform = (profileId: string, platform: string) => {
-    return slots.filter((s) => s.profile_id === profileId && s.platform === platform && s.is_active);
-  };
-
-  // Get all connected accounts across all profiles with their parent profile info and slots
-  const getAllConnectedAccountsWithSlots = () => {
-    const accountsWithSlots: Array<{
-      profile: (typeof profiles)[0];
-      account: ConnectedAccount;
-      slot: (typeof slots)[0];
-    }> = [];
-
-    const accountsWithoutSlots: Array<{
-      profile: (typeof profiles)[0];
-      account: ConnectedAccount;
-    }> = [];
-
-    profiles.forEach((profile) => {
-      const connectedAccounts = (profile.connected_accounts as ConnectedAccount[]) || [];
-      connectedAccounts.forEach((account) => {
-        const accountSlots = getSlotsByProfilePlatform(profile.id, account.platform);
-
-        if (accountSlots.length > 0) {
-          // Add each slot as a separate entry
-          accountSlots.forEach((slot) => {
-            accountsWithSlots.push({
-              profile,
-              account,
-              slot,
-            });
-          });
-        } else {
-          accountsWithoutSlots.push({
-            profile,
-            account,
-          });
+  // Build a map of occupied slot-dates
+  const occupiedSlotDates = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    
+    contents?.forEach(c => {
+      if (c.scheduled_slot_id && c.scheduled_at) {
+        const dateStr = format(new Date(c.scheduled_at), 'yyyy-MM-dd');
+        if (!map.has(c.scheduled_slot_id)) {
+          map.set(c.scheduled_slot_id, new Set());
         }
+        map.get(c.scheduled_slot_id)!.add(dateStr);
+      }
+    });
+    
+    scheduledContents?.forEach(sc => {
+      const dateStr = format(new Date(sc.scheduled_date), 'yyyy-MM-dd');
+      if (!map.has(sc.slot_id)) {
+        map.set(sc.slot_id, new Set());
+      }
+      map.get(sc.slot_id)!.add(dateStr);
+    });
+    
+    return map;
+  }, [contents, scheduledContents]);
+
+  // Find next available slot for a platform/profile combination
+  const findNextAvailableSlot = useCallback((
+    platformSlots: ScheduleSlot[],
+    nowWib: Date
+  ): NextAvailableSlot | null => {
+    if (platformSlots.length === 0) return null;
+
+    const sortedSlots = [...platformSlots].sort((a, b) => {
+      if (a.hour !== b.hour) return a.hour - b.hour;
+      return a.minute - b.minute;
+    });
+
+    for (let dayOffset = 0; dayOffset < 365; dayOffset++) {
+      const checkDate = addDays(startOfDay(nowWib), dayOffset);
+      const dayOfWeek = checkDate.getDay();
+
+      for (const slot of sortedSlots) {
+        if (slot.type === 'weekly' && slot.week_days) {
+          if (!slot.week_days.includes(dayOfWeek)) continue;
+        }
+
+        const slotDateTimeWib = new Date(checkDate);
+        slotDateTimeWib.setHours(slot.hour, slot.minute, 0, 0);
+
+        if (dayOffset === 0 && nowWib >= slotDateTimeWib) continue;
+
+        const dateStr = format(checkDate, 'yyyy-MM-dd');
+        const occupiedDates = occupiedSlotDates.get(slot.id);
+        if (occupiedDates?.has(dateStr)) continue;
+
+        return {
+          slotId: slot.id,
+          profileId: slot.profile_id,
+          scheduledAt: wibToUtc(slotDateTimeWib),
+          displayDate: slotDateTimeWib,
+          hour: slot.hour,
+          minute: slot.minute
+        };
+      }
+    }
+
+    return null;
+  }, [occupiedSlotDates]);
+
+  // Group by platform with next available slot info
+  const platformOptions = useMemo(() => {
+    const nowWib = getNowWib();
+    const options: {
+      platform: string;
+      profileId: string;
+      profileName: string;
+      accountUsername: string;
+      accountPicture?: string;
+      slotCount: number;
+      nextSlot: NextAvailableSlot | null;
+    }[] = [];
+
+    profiles.forEach(profile => {
+      if (!profile.connected_accounts) return;
+      
+      (profile.connected_accounts as ConnectedAccount[]).forEach((acc) => {
+        const platformSlots = slots.filter(
+          s => s.profile_id === profile.id && 
+               s.platform === acc.platform && 
+               s.is_active
+        );
+        
+        if (platformSlots.length === 0) return;
+
+        const nextSlot = findNextAvailableSlot(platformSlots, nowWib);
+        
+        options.push({
+          platform: acc.platform,
+          profileId: profile.id,
+          profileName: profile.name,
+          accountUsername: acc.username,
+          accountPicture: acc.profile_picture,
+          slotCount: platformSlots.length,
+          nextSlot
+        });
       });
     });
 
-    return { accountsWithSlots, accountsWithoutSlots };
-  };
+    return options.sort((a, b) => {
+      if (a.platform !== b.platform) return a.platform.localeCompare(b.platform);
+      return a.profileName.localeCompare(b.profileName);
+    });
+  }, [profiles, slots, findNextAvailableSlot]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -178,127 +270,98 @@ export default function ContentPage() {
   const openAssignDialog = (contentId: string, fromTrash: boolean = false) => {
     setSelectedContentId(contentId);
     setIsFromTrash(fromTrash);
-    setSelectedSlots([]); // Reset selections
-    setDialogProfileFilter("all"); // Reset filters
+    setSelectedPlatforms([]);
+    setDialogProfileFilter("all");
     setDialogPlatformFilter("all");
     setAssignDialogOpen(true);
   };
 
-  const toggleSlotSelection = (slot: SelectedSlot) => {
-    setSelectedSlots((prev) => {
-      const exists = prev.find((s) => s.slotId === slot.slotId);
+  const togglePlatform = (option: typeof platformOptions[0]) => {
+    setSelectedPlatforms(prev => {
+      const key = `${option.profileId}-${option.platform}`;
+      const exists = prev.find(p => `${p.profileId}-${p.platform}` === key);
       if (exists) {
-        return prev.filter((s) => s.slotId !== slot.slotId);
-      } else {
-        return [...prev, slot];
+        return prev.filter(p => `${p.profileId}-${p.platform}` !== key);
       }
+      return [...prev, {
+        platform: option.platform,
+        profileId: option.profileId,
+        profileName: option.profileName,
+        accountUsername: option.accountUsername
+      }];
     });
   };
 
-  const isSlotSelected = (slotId: string) => {
-    return selectedSlots.some((s) => s.slotId === slotId);
-  };
-
-  // Find next available date for a specific slot (for auto-assign)
-  const findNextAvailableDateForSlot = (slotId: string): Date => {
-    const now = new Date();
-    const slot = slots.find((s) => s.id === slotId);
-    if (!slot) return now;
-
-    // Start from today at midnight
-    const startDate = new Date();
-    startDate.setHours(0, 0, 0, 0);
-
-    // Check if slot time has already passed today
-    const todaySlotTime = new Date();
-    todaySlotTime.setHours(slot.hour, slot.minute, 0, 0);
-
-    // If slot time already passed today, start from tomorrow
-    if (now > todaySlotTime) {
-      startDate.setDate(startDate.getDate() + 1);
-    }
-
-    // Get all dates that already have content assigned to this slot
-    const occupiedDates = contents
-      .filter((c) => c.scheduled_slot_id === slotId && (c.status === "assigned" || c.status === "scheduled"))
-      .map((c) => {
-        if (!c.scheduled_at) return null;
-        const d = new Date(c.scheduled_at);
-        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      })
-      .filter(Boolean);
-
-    // Find the first available date starting from startDate
-    for (let i = 0; i < 365; i++) {
-      const checkDate = new Date(startDate);
-      checkDate.setDate(checkDate.getDate() + i);
-
-      // For weekly slots, check if this day of week is active
-      if (slot.type === "weekly" && slot.week_days) {
-        if (!slot.week_days.includes(checkDate.getDay())) {
-          continue;
-        }
-      }
-
-      const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
-      if (!occupiedDates.includes(dateKey)) {
-        return checkDate;
-      }
-    }
-
-    return startDate; // fallback
-  };
-
-  const handleMultiAssign = async () => {
-    if (!selectedContentId || selectedSlots.length === 0) return;
+  const handleAssign = async () => {
+    if (!selectedContentId || selectedPlatforms.length === 0) return;
 
     const originalContent = contents.find((c) => c.id === selectedContentId);
     if (!originalContent) return;
 
-    // Process each selected slot
-    for (let i = 0; i < selectedSlots.length; i++) {
-      const slotData = selectedSlots[i];
-      const slot = slots.find((s) => s.id === slotData.slotId);
+    setIsAssigning(true);
+    const nowWib = getNowWib();
+    let successCount = 0;
 
-      // Find next available date for this slot
-      const scheduledDate = findNextAvailableDateForSlot(slotData.slotId);
-      scheduledDate.setHours(slot?.hour || 0, slot?.minute || 0, 0, 0);
+    try {
+      for (let i = 0; i < selectedPlatforms.length; i++) {
+        const selection = selectedPlatforms[i];
+        
+        const platformSlots = slots.filter(
+          s => s.profile_id === selection.profileId && 
+               s.platform === selection.platform && 
+               s.is_active
+        );
+        
+        const nextSlot = findNextAvailableSlot(platformSlots, nowWib);
+        
+        if (!nextSlot) {
+          toast.error(`No slot available for ${formatUsername(selection.accountUsername)}`);
+          continue;
+        }
 
-      if (i === 0) {
-        // First slot: update original content
-        updateContent.mutate({
-          id: selectedContentId,
-          assigned_profile_id: slotData.profileId,
-          scheduled_slot_id: slotData.slotId,
-          scheduled_at: scheduledDate.toISOString(),
-          status: "assigned",
-          removed_at: null,
-          removed_from_profile_id: null,
-        });
-      } else {
-        // Additional slots: create duplicate content
-        addContent.mutate({
-          file_name: originalContent.file_name,
-          caption: originalContent.caption,
-          description: originalContent.description,
-          file_size: originalContent.file_size,
-          file_url: originalContent.file_url,
-          assigned_profile_id: slotData.profileId,
-          scheduled_slot_id: slotData.slotId,
-          scheduled_at: scheduledDate.toISOString(),
-          status: "assigned",
-          removed_at: null,
-          removed_from_profile_id: null,
-        });
+        if (i === 0) {
+          await updateContent.mutateAsync({
+            id: selectedContentId,
+            assigned_profile_id: nextSlot.profileId,
+            scheduled_slot_id: nextSlot.slotId,
+            scheduled_at: nextSlot.scheduledAt.toISOString(),
+            platform: selection.platform,
+            status: "assigned",
+            removed_at: null,
+            removed_from_profile_id: null,
+          });
+        } else {
+          await addContent.mutateAsync({
+            file_name: originalContent.file_name,
+            caption: originalContent.caption,
+            description: originalContent.description,
+            file_size: originalContent.file_size,
+            file_url: originalContent.file_url,
+            assigned_profile_id: nextSlot.profileId,
+            scheduled_slot_id: nextSlot.slotId,
+            scheduled_at: nextSlot.scheduledAt.toISOString(),
+            platform: selection.platform,
+            status: "assigned",
+            removed_at: null,
+            removed_from_profile_id: null,
+          });
+        }
+        successCount++;
       }
+
+      if (successCount > 0) {
+        toast.success(`Content assigned to ${successCount} slot${successCount > 1 ? "s" : ""}`);
+      }
+      
+      setAssignDialogOpen(false);
+      setSelectedContentId(null);
+      setSelectedPlatforms([]);
+      setIsFromTrash(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to assign');
+    } finally {
+      setIsAssigning(false);
     }
-
-    toast.success(`Content assigned to ${selectedSlots.length} slot${selectedSlots.length > 1 ? "s" : ""}`);
-
-    setAssignDialogOpen(false);
-    setSelectedContentId(null);
-    setSelectedSlots([]);
-    setIsFromTrash(false);
   };
 
   const handleAssignedContentClick = (content: (typeof assignedContents)[0]) => {
@@ -358,18 +421,11 @@ export default function ContentPage() {
   };
 
   const isLoading = profilesLoading || contentsLoading || slotsLoading;
-  const { accountsWithSlots, accountsWithoutSlots } = getAllConnectedAccountsWithSlots();
 
-  // Filter accounts based on dialog filters
-  const filteredAccountsWithSlots = accountsWithSlots.filter(({ profile, account }) => {
-    const matchProfile = dialogProfileFilter === "all" || profile.id === dialogProfileFilter;
-    const matchPlatform = dialogPlatformFilter === "all" || account.platform === dialogPlatformFilter;
-    return matchProfile && matchPlatform;
-  });
-
-  const filteredAccountsWithoutSlots = accountsWithoutSlots.filter(({ profile, account }) => {
-    const matchProfile = dialogProfileFilter === "all" || profile.id === dialogProfileFilter;
-    const matchPlatform = dialogPlatformFilter === "all" || account.platform === dialogPlatformFilter;
+  // Filter platform options based on dialog filters
+  const filteredPlatformOptions = platformOptions.filter((option) => {
+    const matchProfile = dialogProfileFilter === "all" || option.profileId === dialogProfileFilter;
+    const matchPlatform = dialogPlatformFilter === "all" || option.platform === dialogPlatformFilter;
     return matchProfile && matchPlatform;
   });
 
@@ -728,11 +784,11 @@ export default function ContentPage() {
           </TabsContent>
         </Tabs>
 
-        {/* Assign Dialog - Multi-Select with checkboxes */}
+        {/* Assign Dialog - Auto-Assign by Platform */}
         <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-          <DialogContent className="bg-card border-border">
+          <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Assign to Profile</DialogTitle>
+              <DialogTitle>Auto Assign to Platform</DialogTitle>
             </DialogHeader>
 
             {/* Filters */}
@@ -779,118 +835,105 @@ export default function ContentPage() {
               </Select>
             </div>
 
-            <div className="space-y-4">
-              {filteredAccountsWithSlots.length === 0 && filteredAccountsWithoutSlots.length === 0 ? (
+            <div className="space-y-4 max-h-[400px] overflow-y-auto py-2">
+              {filteredPlatformOptions.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground mb-4">
-                    No connected accounts yet. Connect your social media accounts first.
-                  </p>
-                  <Button variant="outline" onClick={() => navigate("/profiles")}>
+                  <Clock className="w-12 h-12 mx-auto mb-3 opacity-50 text-muted-foreground" />
+                  <p className="text-muted-foreground">No active schedule slots available</p>
+                  <p className="text-sm text-muted-foreground mt-1">Create schedule slots first</p>
+                  <Button variant="outline" className="mt-4" onClick={() => navigate("/profiles")}>
                     Go to Profiles
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {/* Accounts with slots - each slot is a separate row with checkbox */}
-                  {filteredAccountsWithSlots.map(({ profile, account, slot }) => {
-                    const slotKey = slot.id;
-                    const isSelected = isSlotSelected(slotKey);
-                    const slotData: SelectedSlot = {
-                      profileId: profile.id,
-                      slotId: slot.id,
-                      platform: account.platform,
-                      username: account.username,
-                      time: `${String(slot.hour).padStart(2, "0")}:${String(slot.minute).padStart(2, "0")}`,
-                      profilePicture: account.profile_picture,
-                    };
-
+                <div className="space-y-2">
+                  {filteredPlatformOptions.map(option => {
+                    const key = `${option.profileId}-${option.platform}`;
+                    const isSelected = selectedPlatforms.some(
+                      p => `${p.profileId}-${p.platform}` === key
+                    );
+                    
                     return (
-                      <div
-                        key={`${profile.id}-${account.platform}-${slot.id}`}
-                        onClick={() => toggleSlotSelection(slotData)}
+                      <label
+                        key={key}
                         className={cn(
-                          "flex items-center gap-3 p-4 rounded-lg cursor-pointer transition-colors",
-                          isSelected
-                            ? "bg-primary/10 border-2 border-primary"
-                            : "hover:bg-secondary border-2 border-transparent",
+                          "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border",
+                          isSelected 
+                            ? "bg-primary/10 border-primary/30" 
+                            : "hover:bg-secondary/50 border-border"
                         )}
                       >
                         <Checkbox
                           checked={isSelected}
-                          onCheckedChange={() => toggleSlotSelection(slotData)}
-                          className="pointer-events-none"
+                          onCheckedChange={() => togglePlatform(option)}
                         />
-                        {account.profile_picture ? (
-                          <img
-                            src={account.profile_picture}
-                            alt={account.username}
-                            className="w-10 h-10 rounded-full object-cover"
+                        
+                        {option.accountPicture ? (
+                          <img 
+                            src={option.accountPicture} 
+                            alt={option.accountUsername}
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                            <PlatformIcon platform={account.platform as Platform} className="w-5 h-5" />
+                          <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                            <PlatformIcon platform={option.platform as Platform} className="w-4 h-4" />
                           </div>
                         )}
+                        
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
-                            <span className="font-medium">{formatUsername(account.username)}</span>
+                            <PlatformIcon platform={option.platform as Platform} size="sm" />
+                            <span className="font-medium text-sm">
+                              {formatUsername(option.accountUsername)}
+                            </span>
                           </div>
-                          <p className="text-sm text-muted-foreground">{profile.name}</p>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                            <span>{option.profileName}</span>
+                            <span>•</span>
+                            <span>{option.slotCount} slots</span>
+                          </div>
                         </div>
-                        <span className="text-sm font-medium text-primary">
-                          {String(slot.hour).padStart(2, "0")}:{String(slot.minute).padStart(2, "0")}
-                        </span>
-                        {isSelected && <Check className="w-5 h-5 text-primary" />}
-                      </div>
+                        
+                        {option.nextSlot ? (
+                          <div className="text-right flex-shrink-0">
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Calendar className="w-3 h-3" />
+                              <span>{format(option.nextSlot.displayDate, 'MMM d')}</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-xs font-medium">
+                              <Clock className="w-3 h-3" />
+                              <span>
+                                {String(option.nextSlot.hour).padStart(2, '0')}:
+                                {String(option.nextSlot.minute).padStart(2, '0')}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No slot</span>
+                        )}
+                      </label>
                     );
                   })}
-
-                  {/* Accounts without slots - disabled */}
-                  {filteredAccountsWithoutSlots.map(({ profile, account }) => (
-                    <div
-                      key={`${profile.id}-${account.platform}-no-slot`}
-                      className="flex items-center gap-3 p-4 rounded-lg transition-colors opacity-50 cursor-not-allowed bg-secondary/30"
-                    >
-                      <Checkbox disabled className="pointer-events-none" />
-                      {account.profile_picture ? (
-                        <img
-                          src={account.profile_picture}
-                          alt={account.username}
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                          <PlatformIcon platform={account.platform as Platform} className="w-5 h-5" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <PlatformIcon platform={account.platform as Platform} className="w-4 h-4" />
-                          <span className="font-medium">{formatUsername(account.username)}</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{profile.name}</p>
-                      </div>
-                      <div className="flex items-center gap-1 text-warning text-xs">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        <span>No time slots</span>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
 
-            {/* Footer with selected count and assign button */}
-            {(filteredAccountsWithSlots.length > 0 || filteredAccountsWithoutSlots.length > 0) && (
-              <DialogFooter className="flex items-center justify-between sm:justify-between">
-                <span className="text-sm text-muted-foreground">{selectedSlots.length} selected</span>
-                <Button onClick={handleMultiAssign} disabled={selectedSlots.length === 0}>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleAssign} 
+                disabled={selectedPlatforms.length === 0 || isAssigning}
+              >
+                {isAssigning ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
                   <Send className="w-4 h-4 mr-1" />
-                  Assign{selectedSlots.length > 0 ? ` to ${selectedSlots.length}` : ""}
-                </Button>
-              </DialogFooter>
-            )}
+                )}
+                Assign ({selectedPlatforms.length})
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

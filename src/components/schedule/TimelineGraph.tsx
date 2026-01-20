@@ -25,8 +25,8 @@ interface TimelineGraphProps {
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 export function TimelineGraph({ profileId, platform, dates, scrollToHour, highlightContentId }: TimelineGraphProps) {
-  // Use Supabase hooks instead of local store
-  const { slots: allSlots } = useScheduleSlots();
+  // Use Supabase hooks - pass profileId and platform for proper filtering
+  const { slots: allSlots, isLoading: slotsLoading } = useScheduleSlots(profileId, platform);
   const { contents, updateContent } = useContents();
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);

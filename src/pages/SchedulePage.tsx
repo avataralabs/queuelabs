@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button';
 import { PlatformBadge } from '@/components/common/PlatformBadge';
 import { TimelineGraph } from '@/components/schedule/TimelineGraph';
 import { ScheduleSlotManager } from '@/components/schedule/ScheduleSlotManager';
-import { UnscheduledContentPanel } from '@/components/schedule/UnscheduledContentPanel';
-import {
+import { 
   Select,
   SelectContent,
   SelectItem,
@@ -254,14 +253,6 @@ export default function SchedulePage() {
                 profileId={selectedProfileId}
                 platform={selectedPlatform}
                 onClose={() => setShowSlotManager(false)}
-              />
-            )}
-            
-            {/* Unscheduled Assigned Content Panel */}
-            {selectedProfile && selectedPlatform && (
-              <UnscheduledContentPanel 
-                profileId={selectedProfileId}
-                platform={selectedPlatform}
               />
             )}
             

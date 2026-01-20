@@ -205,60 +205,99 @@ Deno.serve(async (req) => {
         console.log(`Webhook response body:`, responseJson)
 
         if (webhookResponse.ok) {
-          // Success - move content to trash
-          const { error: updateError } = await supabase
-            .from('contents')
-            .update({
-              status: 'removed',
-              removed_at: now.toISOString(),
-              removed_from_profile_id: profile.id,
-              scheduled_slot_id: null,
-              scheduled_at: null,
-              is_locked: false,
-              upload_attempted_at: now.toISOString(),
-              webhook_response: responseJson
-            })
-            .eq('id', content.id)
+          // Check if this is an async/background upload response
+          const isAsyncUpload = Array.isArray(responseJson) 
+            ? responseJson[0]?.request_id && responseJson[0]?.message?.includes('background')
+            : responseJson?.request_id && responseJson?.message?.includes('background')
+          
+          const asyncRequestId = Array.isArray(responseJson)
+            ? responseJson[0]?.request_id
+            : responseJson?.request_id
 
-          if (updateError) {
-            console.error(`Error updating content ${content.id}:`, updateError)
-            throw updateError
-          }
-
-          // Check for duplicate history entry before inserting
-          const { data: recentSuccessHistory } = await supabase
-            .from('upload_history')
-            .select('id')
-            .eq('content_id', content.id)
-            .gte('uploaded_at', fiveMinutesAgo)
-            .limit(1)
-
-          if (recentSuccessHistory && recentSuccessHistory.length > 0) {
-            console.log(`Skipping history insert - recent entry exists for ${content.id}`)
-          } else {
-            // Add to upload_history
-            const { error: historyError } = await supabase
-              .from('upload_history')
-              .insert({
-                content_id: content.id,
-                profile_id: profile.id,
-                user_id: content.user_id,
-                status: 'success',
-                uploaded_at: now.toISOString()
+          if (isAsyncUpload && asyncRequestId) {
+            // Async upload - mark as processing, store request_id for later polling
+            console.log(`🔄 Async upload detected for content ${content.id}, request_id: ${asyncRequestId}`)
+            
+            const { error: updateError } = await supabase
+              .from('contents')
+              .update({
+                status: 'processing',
+                is_locked: false,
+                upload_attempted_at: now.toISOString(),
+                webhook_response: responseJson,
+                uploadpost_request_id: asyncRequestId
               })
+              .eq('id', content.id)
 
-            if (historyError) {
-              console.error(`Error adding to upload history:`, historyError)
+            if (updateError) {
+              console.error(`Error updating content ${content.id} to processing:`, updateError)
+              throw updateError
             }
+
+            results.push({
+              content_id: content.id,
+              status: 'processing',
+              message: `Upload processing in background, request_id: ${asyncRequestId}`
+            })
+
+            console.log(`🔄 Content ${content.id} marked as processing, will be polled for status`)
+
+          } else {
+            // Synchronous success - move content to trash
+            const { error: updateError } = await supabase
+              .from('contents')
+              .update({
+                status: 'removed',
+                removed_at: now.toISOString(),
+                removed_from_profile_id: profile.id,
+                scheduled_slot_id: null,
+                scheduled_at: null,
+                is_locked: false,
+                upload_attempted_at: now.toISOString(),
+                webhook_response: responseJson
+              })
+              .eq('id', content.id)
+
+            if (updateError) {
+              console.error(`Error updating content ${content.id}:`, updateError)
+              throw updateError
+            }
+
+            // Check for duplicate history entry before inserting
+            const { data: recentSuccessHistory } = await supabase
+              .from('upload_history')
+              .select('id')
+              .eq('content_id', content.id)
+              .gte('uploaded_at', fiveMinutesAgo)
+              .limit(1)
+
+            if (recentSuccessHistory && recentSuccessHistory.length > 0) {
+              console.log(`Skipping history insert - recent entry exists for ${content.id}`)
+            } else {
+              // Add to upload_history
+              const { error: historyError } = await supabase
+                .from('upload_history')
+                .insert({
+                  content_id: content.id,
+                  profile_id: profile.id,
+                  user_id: content.user_id,
+                  status: 'success',
+                  uploaded_at: now.toISOString()
+                })
+
+              if (historyError) {
+                console.error(`Error adding to upload history:`, historyError)
+              }
+            }
+
+            results.push({
+              content_id: content.id,
+              status: 'success',
+              message: 'Upload successful'
+            })
+
+            console.log(`✅ Content ${content.id} uploaded successfully and moved to trash`)
           }
-
-          results.push({
-            content_id: content.id,
-            status: 'success',
-            message: 'Upload successful'
-          })
-
-          console.log(`✅ Content ${content.id} uploaded successfully and moved to trash`)
 
         } else {
           // Failed - release lock and log error

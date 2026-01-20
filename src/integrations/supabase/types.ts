@@ -32,6 +32,7 @@ export type Database = {
           status: string
           upload_attempted_at: string | null
           uploaded_at: string | null
+          uploadpost_request_id: string | null
           user_id: string
           webhook_response: Json | null
         }
@@ -52,6 +53,7 @@ export type Database = {
           status?: string
           upload_attempted_at?: string | null
           uploaded_at?: string | null
+          uploadpost_request_id?: string | null
           user_id: string
           webhook_response?: Json | null
         }
@@ -72,6 +74,7 @@ export type Database = {
           status?: string
           upload_attempted_at?: string | null
           uploaded_at?: string | null
+          uploadpost_request_id?: string | null
           user_id?: string
           webhook_response?: Json | null
         }

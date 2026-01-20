@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useUploadHistory, UploadHistoryWithDetails, ConnectedAccount } from '@/hooks/useUploadHistory';
 import { useProfiles, type Profile, type Platform } from '@/hooks/useProfiles';
-import { useScheduleSlots } from '@/hooks/useScheduleSlots';
+import { useScheduleSlots, type ScheduleSlot } from '@/hooks/useScheduleSlots';
 import { useContents } from '@/hooks/useContents';
+import { useScheduledContents } from '@/hooks/useScheduledContents';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PlatformIcon } from '@/components/common/PlatformIcon';
 import { Button } from '@/components/ui/button';
@@ -21,30 +22,54 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { format } from 'date-fns';
-import { History, FileVideo, CheckCircle, XCircle, Filter, Loader2, Send, Clock } from 'lucide-react';
+import { format, addDays, startOfDay } from 'date-fns';
+import { History, CheckCircle, XCircle, Filter, Loader2, Send, Clock, Calendar } from 'lucide-react';
 import { cn, formatUsername } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
-type SelectedSlot = {
-  slotId: string;
-  profileId: string;
+type SelectedPlatform = {
   platform: string;
+  profileId: string;
+  profileName: string;
   accountUsername: string;
 };
+
+// WIB timezone utilities
+const getNowWib = () => {
+  const now = new Date();
+  // Convert to WIB (UTC+7)
+  const wibOffset = 7 * 60;
+  const utcOffset = now.getTimezoneOffset();
+  return new Date(now.getTime() + (wibOffset + utcOffset) * 60 * 1000);
+};
+
+const wibToUtc = (date: Date): Date => {
+  const wibOffset = 7 * 60;
+  return new Date(date.getTime() - wibOffset * 60 * 1000);
+};
+
+interface NextAvailableSlot {
+  slotId: string;
+  profileId: string;
+  scheduledAt: Date; // UTC
+  displayDate: Date; // WIB for display
+  hour: number;
+  minute: number;
+}
 
 export default function HistoryPage() {
   const { history, isLoading } = useUploadHistory();
   const { profiles } = useProfiles();
   const { slots } = useScheduleSlots();
-  const { addContent } = useContents();
+  const { addContent, contents } = useContents(['pending', 'scheduled', 'assigned']);
+  const { scheduledContents } = useScheduledContents();
   const { toast } = useToast();
   
   const [filterProfileId, setFilterProfileId] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<UploadHistoryWithDetails | null>(null);
-  const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<SelectedPlatform[]>([]);
   const [isAssigning, setIsAssigning] = useState(false);
   
   const filteredHistory = useMemo(() => {
@@ -58,60 +83,200 @@ export default function HistoryPage() {
     success: history.filter(h => h.status === 'success').length,
     failed: history.filter(h => h.status === 'failed').length,
   }), [history]);
-  
-  // Group slots by profile
-  const profilesWithSlots = useMemo(() => {
-    return profiles
-      .filter(p => p.connected_accounts && p.connected_accounts.length > 0)
-      .map(profile => ({
-        profile,
-        accounts: (profile.connected_accounts || []).map(acc => ({
-          ...acc,
-          slots: slots.filter(s => s.profile_id === profile.id && s.platform === acc.platform && s.is_active)
-        })).filter(acc => acc.slots.length > 0)
-      }))
-      .filter(p => p.accounts.length > 0);
-  }, [profiles, slots]);
+
+  // Build a map of occupied slot-dates
+  const occupiedSlotDates = useMemo(() => {
+    const map = new Map<string, Set<string>>(); // slotId -> Set of date strings (YYYY-MM-DD)
+    
+    // From contents table (pending/scheduled/assigned)
+    contents?.forEach(c => {
+      if (c.scheduled_slot_id && c.scheduled_at) {
+        const dateStr = format(new Date(c.scheduled_at), 'yyyy-MM-dd');
+        if (!map.has(c.scheduled_slot_id)) {
+          map.set(c.scheduled_slot_id, new Set());
+        }
+        map.get(c.scheduled_slot_id)!.add(dateStr);
+      }
+    });
+    
+    // From scheduled_contents table
+    scheduledContents?.forEach(sc => {
+      const dateStr = format(new Date(sc.scheduled_date), 'yyyy-MM-dd');
+      if (!map.has(sc.slot_id)) {
+        map.set(sc.slot_id, new Set());
+      }
+      map.get(sc.slot_id)!.add(dateStr);
+    });
+    
+    return map;
+  }, [contents, scheduledContents]);
+
+  // Find next available slot for a platform/profile combination
+  const findNextAvailableSlot = useCallback((
+    platformSlots: ScheduleSlot[],
+    nowWib: Date
+  ): NextAvailableSlot | null => {
+    if (platformSlots.length === 0) return null;
+
+    // Sort slots by hour:minute
+    const sortedSlots = [...platformSlots].sort((a, b) => {
+      if (a.hour !== b.hour) return a.hour - b.hour;
+      return a.minute - b.minute;
+    });
+
+    // Check up to 365 days ahead
+    for (let dayOffset = 0; dayOffset < 365; dayOffset++) {
+      const checkDate = addDays(startOfDay(nowWib), dayOffset);
+      const dayOfWeek = checkDate.getDay();
+
+      for (const slot of sortedSlots) {
+        // Check weekly slot days
+        if (slot.type === 'weekly' && slot.week_days) {
+          if (!slot.week_days.includes(dayOfWeek)) continue;
+        }
+
+        // Create slot datetime in WIB
+        const slotDateTimeWib = new Date(checkDate);
+        slotDateTimeWib.setHours(slot.hour, slot.minute, 0, 0);
+
+        // Skip if slot time has passed today
+        if (dayOffset === 0 && nowWib >= slotDateTimeWib) continue;
+
+        // Check if slot+date is occupied
+        const dateStr = format(checkDate, 'yyyy-MM-dd');
+        const occupiedDates = occupiedSlotDates.get(slot.id);
+        if (occupiedDates?.has(dateStr)) continue;
+
+        // Found available slot!
+        return {
+          slotId: slot.id,
+          profileId: slot.profile_id,
+          scheduledAt: wibToUtc(slotDateTimeWib),
+          displayDate: slotDateTimeWib,
+          hour: slot.hour,
+          minute: slot.minute
+        };
+      }
+    }
+
+    return null;
+  }, [occupiedSlotDates]);
+
+  // Group by platform with next available slot info
+  const platformOptions = useMemo(() => {
+    const nowWib = getNowWib();
+    const options: {
+      platform: string;
+      profileId: string;
+      profileName: string;
+      accountUsername: string;
+      accountPicture?: string;
+      slotCount: number;
+      nextSlot: NextAvailableSlot | null;
+    }[] = [];
+
+    profiles.forEach(profile => {
+      if (!profile.connected_accounts) return;
+      
+      profile.connected_accounts.forEach((acc: ConnectedAccount) => {
+        const platformSlots = slots.filter(
+          s => s.profile_id === profile.id && 
+               s.platform === acc.platform && 
+               s.is_active
+        );
+        
+        if (platformSlots.length === 0) return;
+
+        const nextSlot = findNextAvailableSlot(platformSlots, nowWib);
+        
+        options.push({
+          platform: acc.platform,
+          profileId: profile.id,
+          profileName: profile.name,
+          accountUsername: acc.username,
+          accountPicture: acc.profile_picture,
+          slotCount: platformSlots.length,
+          nextSlot
+        });
+      });
+    });
+
+    // Sort by platform, then by profile name
+    return options.sort((a, b) => {
+      if (a.platform !== b.platform) return a.platform.localeCompare(b.platform);
+      return a.profileName.localeCompare(b.profileName);
+    });
+  }, [profiles, slots, findNextAvailableSlot]);
   
   const openAssignDialog = (entry: UploadHistoryWithDetails) => {
     setSelectedEntry(entry);
-    setSelectedSlots([]);
+    setSelectedPlatforms([]);
     setAssignDialogOpen(true);
   };
   
-  const toggleSlot = (slotId: string, profileId: string, platform: string, accountUsername: string) => {
-    setSelectedSlots(prev => {
-      const exists = prev.find(s => s.slotId === slotId);
+  const togglePlatform = (option: typeof platformOptions[0]) => {
+    setSelectedPlatforms(prev => {
+      const key = `${option.profileId}-${option.platform}`;
+      const exists = prev.find(p => `${p.profileId}-${p.platform}` === key);
       if (exists) {
-        return prev.filter(s => s.slotId !== slotId);
+        return prev.filter(p => `${p.profileId}-${p.platform}` !== key);
       }
-      return [...prev, { slotId, profileId, platform, accountUsername }];
+      return [...prev, {
+        platform: option.platform,
+        profileId: option.profileId,
+        profileName: option.profileName,
+        accountUsername: option.accountUsername
+      }];
     });
   };
   
   const handleAssign = async () => {
-    if (!selectedEntry?.contents || selectedSlots.length === 0) return;
+    if (!selectedEntry?.contents || selectedPlatforms.length === 0) return;
     
     setIsAssigning(true);
+    const nowWib = getNowWib();
+    let successCount = 0;
+    
     try {
-      for (const slot of selectedSlots) {
-        const slotData = slots.find(s => s.id === slot.slotId);
-        if (!slotData) continue;
+      for (const selection of selectedPlatforms) {
+        // Get slots for this platform/profile
+        const platformSlots = slots.filter(
+          s => s.profile_id === selection.profileId && 
+               s.platform === selection.platform && 
+               s.is_active
+        );
+        
+        // Find next available slot
+        const nextSlot = findNextAvailableSlot(platformSlots, nowWib);
+        
+        if (!nextSlot) {
+          toast({
+            title: `No slot available`,
+            description: `No available slot for ${formatUsername(selection.accountUsername)}`,
+            variant: 'destructive'
+          });
+          continue;
+        }
         
         await addContent.mutateAsync({
           file_name: selectedEntry.contents.file_name,
           file_url: selectedEntry.contents.file_url,
-          platform: slot.platform,
+          platform: selection.platform,
           status: 'pending',
-          assigned_profile_id: slot.profileId,
-          scheduled_slot_id: slot.slotId
+          assigned_profile_id: nextSlot.profileId,
+          scheduled_slot_id: nextSlot.slotId,
+          scheduled_at: nextSlot.scheduledAt.toISOString()
         });
+        
+        successCount++;
       }
       
-      toast({
-        title: 'Content assigned',
-        description: `Assigned to ${selectedSlots.length} slot(s) successfully`
-      });
+      if (successCount > 0) {
+        toast({
+          title: 'Content assigned',
+          description: `Assigned to ${successCount} slot(s) successfully`
+        });
+      }
       setAssignDialogOpen(false);
     } catch (error) {
       toast({
@@ -304,7 +469,7 @@ export default function HistoryPage() {
         <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Assign to Schedule Slot</DialogTitle>
+              <DialogTitle>Auto Assign to Platform</DialogTitle>
             </DialogHeader>
             
             <div className="space-y-4 max-h-[400px] overflow-y-auto py-2">
@@ -314,54 +479,82 @@ export default function HistoryPage() {
                 </div>
               )}
               
-              {profilesWithSlots.length === 0 ? (
+              {platformOptions.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p>No active schedule slots available</p>
                   <p className="text-sm mt-1">Create schedule slots first</p>
                 </div>
               ) : (
-                profilesWithSlots.map(({ profile, accounts }) => (
-                  <div key={profile.id} className="space-y-2">
-                    <p className="text-sm font-medium text-muted-foreground">{profile.name}</p>
-                    {accounts.map(account => (
-                      <div key={`${profile.id}-${account.platform}`} className="space-y-1">
-                        <div className="flex items-center gap-2 text-sm">
-                          <PlatformIcon platform={account.platform as Platform} size="sm" />
-                          <span>{formatUsername(account.username)}</span>
+                <div className="space-y-2">
+                  {platformOptions.map(option => {
+                    const key = `${option.profileId}-${option.platform}`;
+                    const isSelected = selectedPlatforms.some(
+                      p => `${p.profileId}-${p.platform}` === key
+                    );
+                    
+                    return (
+                      <label
+                        key={key}
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border",
+                          isSelected 
+                            ? "bg-primary/10 border-primary/30" 
+                            : "hover:bg-secondary/50 border-border"
+                        )}
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => togglePlatform(option)}
+                        />
+                        
+                        {option.accountPicture ? (
+                          <img 
+                            src={option.accountPicture} 
+                            alt={option.accountUsername}
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                            <PlatformIcon platform={option.platform as Platform} className="w-4 h-4" />
+                          </div>
+                        )}
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <PlatformIcon platform={option.platform as Platform} size="sm" />
+                            <span className="font-medium text-sm">
+                              {formatUsername(option.accountUsername)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                            <span>{option.profileName}</span>
+                            <span>•</span>
+                            <span>{option.slotCount} slots</span>
+                          </div>
                         </div>
-                        <div className="pl-6 space-y-1">
-                          {account.slots.map(slot => {
-                            const isSelected = selectedSlots.some(s => s.slotId === slot.id);
-                            return (
-                              <label
-                                key={slot.id}
-                                className={cn(
-                                  "flex items-center gap-2 p-2 rounded cursor-pointer transition-colors",
-                                  isSelected ? "bg-primary/10" : "hover:bg-secondary/50"
-                                )}
-                              >
-                                <Checkbox
-                                  checked={isSelected}
-                                  onCheckedChange={() => toggleSlot(slot.id, profile.id, account.platform, account.username)}
-                                />
-                                <Clock className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-sm">
-                                  {String(slot.hour).padStart(2, '0')}:{String(slot.minute).padStart(2, '0')}
-                                  {slot.week_days && slot.week_days.length < 7 && (
-                                    <span className="text-muted-foreground ml-1">
-                                      ({slot.week_days.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ')})
-                                    </span>
-                                  )}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))
+                        
+                        {option.nextSlot ? (
+                          <div className="text-right flex-shrink-0">
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Calendar className="w-3 h-3" />
+                              <span>{format(option.nextSlot.displayDate, 'MMM d')}</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-xs font-medium">
+                              <Clock className="w-3 h-3" />
+                              <span>
+                                {String(option.nextSlot.hour).padStart(2, '0')}:
+                                {String(option.nextSlot.minute).padStart(2, '0')}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No slot</span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
               )}
             </div>
             
@@ -371,14 +564,14 @@ export default function HistoryPage() {
               </Button>
               <Button 
                 onClick={handleAssign} 
-                disabled={selectedSlots.length === 0 || isAssigning}
+                disabled={selectedPlatforms.length === 0 || isAssigning}
               >
                 {isAssigning ? (
                   <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                 ) : (
                   <Send className="w-4 h-4 mr-1" />
                 )}
-                Assign ({selectedSlots.length})
+                Assign ({selectedPlatforms.length})
               </Button>
             </DialogFooter>
           </DialogContent>

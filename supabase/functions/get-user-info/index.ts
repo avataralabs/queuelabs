@@ -127,40 +127,58 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    // 3. Get profiles with connected accounts
-    const { data: profiles } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('user_id', user.id);
+    const isAdmin = userRoles?.role === 'admin';
+    console.log('User role:', userRoles?.role, 'isAdmin:', isAdmin);
 
-    // 4. Get ALL schedule slots for user
-    const { data: scheduleSlots } = await supabaseAdmin
+    // 3. Get profiles with connected accounts (admin sees ALL, user sees own)
+    let profilesQuery = supabaseAdmin.from('profiles').select('*');
+    if (!isAdmin) {
+      profilesQuery = profilesQuery.eq('user_id', user.id);
+    }
+    const { data: profiles } = await profilesQuery;
+
+    console.log('Fetched profiles count:', profiles?.length || 0);
+
+    // 4. Get ALL schedule slots (admin sees ALL, user sees own)
+    let slotsQuery = supabaseAdmin
       .from('schedule_slots')
       .select('*')
-      .eq('user_id', user.id)
       .eq('is_active', true)
       .order('hour', { ascending: true });
+    if (!isAdmin) {
+      slotsQuery = slotsQuery.eq('user_id', user.id);
+    }
+    const { data: scheduleSlots } = await slotsQuery;
 
-    // 5. Get contents summary
-    const { data: contents } = await supabaseAdmin
+    // 5. Get contents summary (admin sees ALL, user sees own)
+    let contentsQuery = supabaseAdmin
       .from('contents')
-      .select('id, status, scheduled_at, scheduled_slot_id')
-      .eq('user_id', user.id);
+      .select('id, status, scheduled_at, scheduled_slot_id');
+    if (!isAdmin) {
+      contentsQuery = contentsQuery.eq('user_id', user.id);
+    }
+    const { data: contents } = await contentsQuery;
 
-    // 6. Get scheduled contents (upcoming)
-    const { data: scheduledContents } = await supabaseAdmin
+    // 6. Get scheduled contents (upcoming) (admin sees ALL, user sees own)
+    let scheduledQuery = supabaseAdmin
       .from('scheduled_contents')
       .select('*')
-      .eq('user_id', user.id)
       .gte('scheduled_date', new Date().toISOString())
-      .order('scheduled_date', { ascending: true })
+      .order('scheduled_date', { ascending: true });
+    if (!isAdmin) {
+      scheduledQuery = scheduledQuery.eq('user_id', user.id);
+    }
+    const { data: scheduledContents } = await scheduledQuery
       .limit(10);
 
-    // 7. Get upload history summary
-    const { data: uploadHistory } = await supabaseAdmin
+    // 7. Get upload history summary (admin sees ALL, user sees own)
+    let historyQuery = supabaseAdmin
       .from('upload_history')
-      .select('id, status')
-      .eq('user_id', user.id);
+      .select('id, status');
+    if (!isAdmin) {
+      historyQuery = historyQuery.eq('user_id', user.id);
+    }
+    const { data: uploadHistory } = await historyQuery;
 
     // Build occupied map for all slots (scheduled content)
     const occupiedMap = new Map<string, Set<string>>();

@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.check-upload-status]
 verify_jwt = false
+
+[functions.batch-assign-content]
+verify_jwt = false

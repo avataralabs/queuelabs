@@ -344,7 +344,7 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
             <DialogHeader>
               <DialogTitle>
                 {selectedSlot?.contents && selectedSlot.contents.length > 0 
-                  ? `Manage Content (${selectedSlot.contents.length})` 
+                  ? 'Manage Content' 
                   : 'Add Content'}
               </DialogTitle>
             </DialogHeader>
@@ -386,7 +386,11 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                                 variant="outline"
                                 size="sm"
                                 className="flex-1 min-w-0 overflow-hidden"
-                                onClick={() => handleUnschedule(content.id)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleUnschedule(content.id);
+                                }}
                               >
                                 <RotateCcw className="w-3 h-3 mr-1 shrink-0" />
                                 <span className="truncate">Unschedule</span>
@@ -395,7 +399,11 @@ export function TimelineGraph({ profileId, platform, dates, scrollToHour, highli
                                 variant="destructive"
                                 size="sm"
                                 className="flex-1 min-w-0 overflow-hidden"
-                                onClick={() => handleRemoveFromSchedule(content.id)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleRemoveFromSchedule(content.id);
+                                }}
                               >
                                 <Trash2 className="w-3 h-3 mr-1 shrink-0" />
                                 <span className="truncate">Remove</span>

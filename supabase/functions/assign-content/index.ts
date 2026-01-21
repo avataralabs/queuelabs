@@ -89,110 +89,6 @@ function findNextAvailableSlot(
   return null;
 }
 
-// Parse request data from either JSON or FormData
-interface RequestData {
-  username: string;
-  account: string;
-  platform: string;
-  caption: string;
-  description: string;
-  schedule_datetime: string | null;
-  schedule_hour: string | null;
-  schedule_minute: string | null;
-  video_url: string | null;
-  videoFile: File | null;
-}
-
-async function parseRequestData(req: Request): Promise<RequestData> {
-  const contentType = req.headers.get('content-type') || '';
-  
-  if (contentType.includes('application/json')) {
-    // JSON body with video_url
-    const body = await req.json();
-    return {
-      username: body.username || '',
-      account: body.account || '',
-      platform: body.platform || '',
-      caption: body.caption || '',
-      description: body.description || '',
-      schedule_datetime: body.schedule_datetime || null,
-      schedule_hour: body.schedule_hour?.toString() || null,
-      schedule_minute: body.schedule_minute?.toString() || null,
-      video_url: body.video_url || null,
-      videoFile: null,
-    };
-  } else {
-    // Multipart form data with file upload
-    const formData = await req.formData();
-    return {
-      username: formData.get('username') as string || '',
-      account: formData.get('account') as string || '',
-      platform: formData.get('platform') as string || '',
-      caption: formData.get('caption') as string || '',
-      description: formData.get('description') as string || '',
-      schedule_datetime: formData.get('schedule_datetime') as string || null,
-      schedule_hour: formData.get('schedule_hour') as string || null,
-      schedule_minute: formData.get('schedule_minute') as string || null,
-      video_url: formData.get('video_url') as string || null,
-      videoFile: formData.get('video') as File || null,
-    };
-  }
-}
-
-// Download video from URL and return file info (streaming to storage)
-async function downloadAndUploadVideo(
-  supabase: any,
-  videoUrl: string,
-  userId: string
-): Promise<{ fileName: string; fileSize: number; originalName: string }> {
-  console.log('Downloading video from URL:', videoUrl);
-  
-  const response = await fetch(videoUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to download video: ${response.status} ${response.statusText}`);
-  }
-  
-  // Get content type and size
-  const contentType = response.headers.get('content-type') || 'video/mp4';
-  const contentLength = response.headers.get('content-length');
-  const fileSize = contentLength ? parseInt(contentLength) : 0;
-  
-  // Extract original filename from URL
-  const urlPath = new URL(videoUrl).pathname;
-  const originalName = urlPath.split('/').pop() || 'video.mp4';
-  const fileExt = originalName.split('.').pop() || 'mp4';
-  
-  // Generate storage path
-  const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-  
-  // Get response body as ArrayBuffer (streaming would require more complex handling)
-  // For large files, we read in chunks to avoid memory pressure
-  const arrayBuffer = await response.arrayBuffer();
-  const fileBuffer = new Uint8Array(arrayBuffer);
-  
-  console.log('Video downloaded, size:', fileBuffer.length, 'bytes, uploading to storage...');
-  
-  const { error: uploadError } = await supabase.storage
-    .from('content-files')
-    .upload(fileName, fileBuffer, {
-      contentType: contentType,
-      upsert: false
-    });
-
-  if (uploadError) {
-    console.error('Error uploading file:', uploadError);
-    throw uploadError;
-  }
-
-  console.log('File uploaded:', fileName);
-  
-  return {
-    fileName,
-    fileSize: fileBuffer.length || fileSize,
-    originalName,
-  };
-}
-
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -211,28 +107,25 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Parse request data (supports both JSON and FormData)
-    const data = await parseRequestData(req);
+    // Parse multipart form data
+    const formData = await req.formData();
     
-    const { 
-      username, account, platform, caption, description, 
-      schedule_datetime, schedule_hour, schedule_minute,
-      video_url, videoFile 
-    } = data;
-
-    // Determine scheduling mode
-    const isManualMode = !!schedule_datetime || (schedule_hour !== null && schedule_minute !== null);
+    const username = formData.get('username') as string; // email
+    const account = formData.get('account') as string; // @username
+    const platform = formData.get('platform') as string;
+    const caption = formData.get('caption') as string || '';
+    const description = formData.get('description') as string || '';
+    const videoFile = formData.get('video') as File;
+    const scheduleDatetime = formData.get('schedule_datetime') as string | null;
+    const isManualMode = !!scheduleDatetime;
 
     const currentWib = nowInWib();
     console.log('Received assign-content request:', { 
       username, account, platform,
-      hasVideoFile: !!videoFile,
-      hasVideoUrl: !!video_url,
-      videoFileName: videoFile?.name,
-      videoFileSize: videoFile?.size,
-      schedule_datetime,
-      schedule_hour,
-      schedule_minute,
+      hasVideo: !!videoFile,
+      videoName: videoFile?.name,
+      videoSize: videoFile?.size,
+      scheduleDatetime,
       mode: isManualMode ? 'manual' : 'auto',
       currentTimeWib: currentWib.toISOString(),
       currentTimeUtc: new Date().toISOString()
@@ -249,9 +142,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!videoFile && !video_url) {
+    if (!videoFile) {
       return new Response(
-        JSON.stringify({ success: false, error: 'No video file or video_url provided' }),
+        JSON.stringify({ success: false, error: 'No video file provided' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -326,52 +219,27 @@ Deno.serve(async (req) => {
     let manualWibDateStr: string = '';
 
     if (isManualMode) {
-      // Manual mode: schedule based on schedule_datetime OR schedule_hour/schedule_minute
+      // Manual mode: no slot needed, scheduling is based on schedule_datetime only
       slot = null;
-      console.log('Manual mode - using provided schedule time');
+      console.log('Manual mode - no slot required, using schedule_datetime');
       
-      if (schedule_datetime) {
-        // Parse schedule_datetime (assumed to be in WIB)
-        const dateStr = schedule_datetime;
-        const [datePart, timePart] = dateStr.includes('T') 
-          ? dateStr.split('T') 
-          : [dateStr.split(' ')[0], dateStr.split(' ')[1] || '00:00:00'];
-        
-        const [year, month, day] = datePart.split('-').map(Number);
-        const timeClean = timePart.split('+')[0].split('Z')[0];
-        const [hour, minute, second] = timeClean.split(':').map(s => parseInt(s) || 0);
-        
-        // Create UTC date: WIB - 7 hours
-        scheduledAtUtc = new Date(Date.UTC(year, month - 1, day, hour - WIB_OFFSET_HOURS, minute, second));
-        
-        // Format WIB string for response
-        manualWibDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+07:00`;
-        
-        console.log('Manual mode - Input WIB:', dateStr, '-> UTC:', scheduledAtUtc.toISOString());
-      } else {
-        // Use schedule_hour and schedule_minute (today or tomorrow if time passed)
-        const hour = parseInt(schedule_hour!);
-        const minute = parseInt(schedule_minute!);
-        
-        const now = nowInWib();
-        const targetDate = new Date(now);
-        targetDate.setHours(hour, minute, 0, 0);
-        
-        // If time has passed today, schedule for tomorrow
-        if (targetDate <= now) {
-          targetDate.setDate(targetDate.getDate() + 1);
-        }
-        
-        scheduledAtUtc = wibToUtc(targetDate);
-        
-        // Format WIB string for response
-        const year = targetDate.getFullYear();
-        const month = targetDate.getMonth() + 1;
-        const day = targetDate.getDate();
-        manualWibDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+07:00`;
-        
-        console.log('Manual mode - Hour/Minute:', hour, minute, '-> WIB:', targetDate.toISOString(), '-> UTC:', scheduledAtUtc.toISOString());
-      }
+      // Parse schedule_datetime (assumed to be in WIB)
+      const dateStr = scheduleDatetime!;
+      const [datePart, timePart] = dateStr.includes('T') 
+        ? dateStr.split('T') 
+        : [dateStr.split(' ')[0], dateStr.split(' ')[1] || '00:00:00'];
+      
+      const [year, month, day] = datePart.split('-').map(Number);
+      const timeClean = timePart.split('+')[0].split('Z')[0];
+      const [hour, minute, second] = timeClean.split(':').map(s => parseInt(s) || 0);
+      
+      // Create UTC date: WIB - 7 hours
+      scheduledAtUtc = new Date(Date.UTC(year, month - 1, day, hour - WIB_OFFSET_HOURS, minute, second));
+      
+      // Format WIB string for response
+      manualWibDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+07:00`;
+      
+      console.log('Manual mode - Input WIB:', dateStr, '-> UTC:', scheduledAtUtc.toISOString());
     } else {
       // Auto mode: find all active slots for profile+platform
       const { data: slots, error: slotsError } = await supabase
@@ -452,49 +320,34 @@ Deno.serve(async (req) => {
     }
 
     // 4. Upload video to storage
-    let fileName: string;
-    let fileSize: number;
-    let originalFileName: string;
+    const fileExt = videoFile.name.split('.').pop() || 'mp4';
+    const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     
-    if (video_url) {
-      // Download from URL and upload to storage
-      const uploadResult = await downloadAndUploadVideo(supabase, video_url, user.id);
-      fileName = uploadResult.fileName;
-      fileSize = uploadResult.fileSize;
-      originalFileName = uploadResult.originalName;
-    } else {
-      // Upload from file
-      const fileExt = videoFile!.name.split('.').pop() || 'mp4';
-      fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      fileSize = videoFile!.size;
-      originalFileName = videoFile!.name;
-      
-      const arrayBuffer = await videoFile!.arrayBuffer();
-      const fileBuffer = new Uint8Array(arrayBuffer);
+    const arrayBuffer = await videoFile.arrayBuffer();
+    const fileBuffer = new Uint8Array(arrayBuffer);
 
-      const { error: uploadError } = await supabase.storage
-        .from('content-files')
-        .upload(fileName, fileBuffer, {
-          contentType: videoFile!.type || 'video/mp4',
-          upsert: false
-        });
+    const { error: uploadError } = await supabase.storage
+      .from('content-files')
+      .upload(fileName, fileBuffer, {
+        contentType: videoFile.type || 'video/mp4',
+        upsert: false
+      });
 
-      if (uploadError) {
-        console.error('Error uploading file:', uploadError);
-        throw uploadError;
-      }
-
-      console.log('File uploaded:', fileName);
+    if (uploadError) {
+      console.error('Error uploading file:', uploadError);
+      throw uploadError;
     }
+
+    console.log('File uploaded:', fileName);
 
     // 5. Create content record (store in UTC)
     const { data: content, error: contentError } = await supabase
       .from('contents')
       .insert({
         user_id: user.id,
-        file_name: originalFileName,
+        file_name: videoFile.name,
         file_url: fileName,
-        file_size: fileSize,
+        file_size: videoFile.size,
         caption: caption,
         description: description,
         status: 'assigned',

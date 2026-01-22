@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { useAppStore } from '@/stores/appStore';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/common/StatCard';
 import { PlatformBadge } from '@/components/common/PlatformBadge';
@@ -21,17 +20,28 @@ import {
   Download,
   TrendingUp,
   TrendingDown,
-  BarChart3
+  BarChart3,
+  Loader2
 } from 'lucide-react';
 import { format, startOfDay, startOfWeek, startOfMonth, endOfDay, endOfWeek, endOfMonth, isWithinInterval, subDays, subWeeks, subMonths } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useContents } from '@/hooks/useContents';
+import { useProfiles } from '@/hooks/useProfiles';
+import { useUploadHistory } from '@/hooks/useUploadHistory';
+import { useScheduledContents } from '@/hooks/useScheduledContents';
 
 type Period = 'daily' | 'weekly' | 'monthly';
 
 export default function Dashboard() {
-  const { profiles, contents, scheduledContents, uploadHistory } = useAppStore();
+  const { contents, isLoading: contentsLoading } = useContents();
+  const { profiles, isLoading: profilesLoading } = useProfiles();
+  const { history: uploadHistory, isLoading: historyLoading } = useUploadHistory();
+  const { scheduledContents, isLoading: scheduledLoading } = useScheduledContents();
+  
   const [period, setPeriod] = useState<Period>('daily');
   const [selectedProfileId, setSelectedProfileId] = useState<string>('all');
+  
+  const isLoading = contentsLoading || profilesLoading || historyLoading || scheduledLoading;
   
   const pendingCount = contents.filter(c => c.status === 'pending').length;
   const scheduledCount = contents.filter(c => c.status === 'scheduled').length;
@@ -40,7 +50,7 @@ export default function Dashboard() {
   
   const today = new Date();
   const todayScheduled = scheduledContents.filter(sc => 
-    new Date(sc.scheduledDate).toDateString() === today.toDateString()
+    new Date(sc.scheduled_date).toDateString() === today.toDateString()
   );
 
   const getDateRange = (p: Period) => {
@@ -77,23 +87,23 @@ export default function Dashboard() {
     const filterByProfile = (items: typeof uploadHistory) => 
       selectedProfileId === 'all' 
         ? items 
-        : items.filter(i => i.profileId === selectedProfileId);
+        : items.filter(i => i.profile_id === selectedProfileId);
     
     const currentHistory = filterByProfile(
       uploadHistory.filter(h => 
-        isWithinInterval(new Date(h.uploadedAt), range)
+        isWithinInterval(new Date(h.uploaded_at), range)
       )
     );
     
     const prevHistory = filterByProfile(
       uploadHistory.filter(h => 
-        isWithinInterval(new Date(h.uploadedAt), prevRange)
+        isWithinInterval(new Date(h.uploaded_at), prevRange)
       )
     );
     
     const currentScheduled = scheduledContents.filter(sc => 
-      (selectedProfileId === 'all' || sc.profileId === selectedProfileId) &&
-      isWithinInterval(new Date(sc.scheduledDate), range)
+      (selectedProfileId === 'all' || sc.profile_id === selectedProfileId) &&
+      isWithinInterval(new Date(sc.scheduled_date), range)
     );
     
     const currentSuccess = currentHistory.filter(h => h.status === 'success').length;
@@ -122,17 +132,43 @@ export default function Dashboard() {
   }, [uploadHistory, scheduledContents, period, selectedProfileId]);
 
   const chartData = useMemo(() => {
+    const range = getDateRange(period);
     const days = period === 'daily' ? 24 : period === 'weekly' ? 7 : 30;
-    return Array.from({ length: days }, (_, i) => ({
-      label: period === 'daily' 
+    
+    // Group upload history by time bucket
+    const buckets = new Map<string, { success: number; failed: number }>();
+    
+    uploadHistory.forEach(h => {
+      const date = new Date(h.uploaded_at);
+      if (!isWithinInterval(date, range)) return;
+      
+      let key: string;
+      if (period === 'daily') {
+        key = date.getHours().toString().padStart(2, '0') + ':00';
+      } else if (period === 'weekly') {
+        key = format(date, 'EEE');
+      } else {
+        key = format(date, 'd');
+      }
+      
+      const bucket = buckets.get(key) || { success: 0, failed: 0 };
+      if (h.status === 'success') bucket.success++;
+      else bucket.failed++;
+      buckets.set(key, bucket);
+    });
+    
+    // Generate chart data with real counts
+    return Array.from({ length: days }, (_, i) => {
+      const label = period === 'daily' 
         ? `${i.toString().padStart(2, '0')}:00`
         : period === 'weekly'
           ? format(subDays(new Date(), 6 - i), 'EEE')
-          : format(subDays(new Date(), 29 - i), 'd'),
-      success: Math.floor(Math.random() * 5),
-      failed: Math.random() > 0.8 ? 1 : 0,
-    }));
-  }, [period]);
+          : format(subDays(new Date(), 29 - i), 'd');
+      
+      const bucket = buckets.get(label) || { success: 0, failed: 0 };
+      return { label, ...bucket };
+    });
+  }, [period, uploadHistory]);
 
   const handleExportPDF = () => {
     // Create report content
@@ -149,7 +185,7 @@ Summary:
 - Scheduled: ${stats.scheduled}
 
 Profiles:
-${profiles.map(p => `- ${p.name} (${p.platform}): ${scheduledContents.filter(sc => sc.profileId === p.id).length} scheduled`).join('\n')}
+${profiles.map(p => `- ${p.name} (${p.platform}): ${scheduledContents.filter(sc => sc.profile_id === p.id).length} scheduled`).join('\n')}
     `;
 
     // Create and download file
@@ -169,6 +205,16 @@ ${profiles.map(p => `- ${p.name} (${p.platform}): ${scheduledContents.filter(sc 
     weekly: 'This Week',
     monthly: 'This Month',
   };
+  
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
   
   return (
     <MainLayout>
@@ -249,7 +295,10 @@ ${profiles.map(p => `- ${p.name} (${p.platform}): ${scheduledContents.filter(sc 
             }
             icon={<CheckCircle className="w-5 h-5" />}
             variant="success"
-            trend={uploadHistory.length > 0 ? { value: 12, isPositive: true } : undefined}
+            trend={uploadHistory.length > 0 && stats.successTrend !== 0 
+              ? { value: Math.abs(stats.successTrend), isPositive: stats.successTrend > 0 } 
+              : undefined
+            }
           />
         </div>
 
@@ -316,13 +365,15 @@ ${profiles.map(p => `- ${p.name} (${p.platform}): ${scheduledContents.filter(sc 
                     {d.failed > 0 && (
                       <div 
                         className="w-full bg-destructive/60 rounded-t"
-                        style={{ height: `${d.failed * 15}px` }}
+                        style={{ height: `${Math.min(d.failed * 15, 85)}px` }}
                       />
                     )}
-                    <div 
-                      className="w-full bg-primary/60 rounded-t"
-                      style={{ height: `${d.success * 15}px` }}
-                    />
+                    {d.success > 0 && (
+                      <div 
+                        className="w-full bg-primary/60 rounded-t"
+                        style={{ height: `${Math.min(d.success * 15, 85)}px` }}
+                      />
+                    )}
                   </div>
                 </div>
                 <span className="text-[10px] text-muted-foreground">{d.label}</span>
@@ -371,10 +422,10 @@ ${profiles.map(p => `- ${p.name} (${p.platform}): ${scheduledContents.filter(sc 
                         </div>
                         <div>
                           <p className="font-medium text-sm truncate max-w-[200px]">
-                            {content.fileName}
+                            {content.file_name}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {format(new Date(content.uploadedAt), 'MMM d, HH:mm')}
+                            {format(new Date(content.uploaded_at), 'MMM d, HH:mm')}
                           </p>
                         </div>
                       </div>
@@ -409,7 +460,7 @@ ${profiles.map(p => `- ${p.name} (${p.platform}): ${scheduledContents.filter(sc 
                     <div>
                       <p className="font-medium text-sm">{profile.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {scheduledContents.filter(sc => sc.profileId === profile.id).length} scheduled
+                        {scheduledContents.filter(sc => sc.profile_id === profile.id).length} scheduled
                       </p>
                     </div>
                     <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />

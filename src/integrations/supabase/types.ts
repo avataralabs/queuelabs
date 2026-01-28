@@ -24,9 +24,11 @@ export type Database = {
           file_url: string | null
           id: string
           is_locked: boolean | null
+          next_retry_at: string | null
           platform: string | null
           removed_at: string | null
           removed_from_profile_id: string | null
+          retry_count: number | null
           scheduled_at: string | null
           scheduled_slot_id: string | null
           status: string
@@ -45,9 +47,11 @@ export type Database = {
           file_url?: string | null
           id?: string
           is_locked?: boolean | null
+          next_retry_at?: string | null
           platform?: string | null
           removed_at?: string | null
           removed_from_profile_id?: string | null
+          retry_count?: number | null
           scheduled_at?: string | null
           scheduled_slot_id?: string | null
           status?: string
@@ -66,9 +70,11 @@ export type Database = {
           file_url?: string | null
           id?: string
           is_locked?: boolean | null
+          next_retry_at?: string | null
           platform?: string | null
           removed_at?: string | null
           removed_from_profile_id?: string | null
+          retry_count?: number | null
           scheduled_at?: string | null
           scheduled_slot_id?: string | null
           status?: string
@@ -297,6 +303,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assign_next_available_slot: {
+        Args: {
+          p_content_id: string
+          p_platform: string
+          p_profile_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       get_user_email: { Args: { _user_id: string }; Returns: string }
       get_user_last_sign_in: { Args: { _user_id: string }; Returns: string }
       has_role: {

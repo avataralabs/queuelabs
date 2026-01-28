@@ -9,17 +9,6 @@ const corsHeaders = {
 const WIB_OFFSET_HOURS = 7;
 const WIB_OFFSET_MS = WIB_OFFSET_HOURS * 60 * 60 * 1000;
 
-// Convert WIB time to UTC for storage
-function wibToUtc(date: Date): Date {
-  return new Date(date.getTime() - WIB_OFFSET_MS);
-}
-
-// Get current time in WIB
-function nowInWib(): Date {
-  const now = new Date();
-  return new Date(now.getTime() + WIB_OFFSET_MS);
-}
-
 // Format date in WIB for display
 function formatWib(date: Date): string {
   const wibDate = new Date(date.getTime() + WIB_OFFSET_MS);
@@ -43,16 +32,6 @@ interface RequestBody {
   queuelabs_accounts: QueueLabsAccount[];
 }
 
-interface ScheduleSlot {
-  id: string;
-  hour: number;
-  minute: number;
-  type: string;
-  week_days: number[] | null;
-  profile_id: string;
-  platform: string;
-}
-
 interface AccountAssignment {
   platform: string;
   username: string;
@@ -65,83 +44,6 @@ interface AccountAssignment {
   slot_id: string;
   status: 'success' | 'error';
   error?: string;
-}
-
-// Find the next available slot and date combination
-function findNextAvailableSlot(
-  slots: ScheduleSlot[],
-  occupiedMap: Map<string, Set<string>>,
-  nowWib: Date
-): { slot: ScheduleSlot; scheduledAtWib: Date } | null {
-  
-  // Sort slots by hour, then minute
-  const sortedSlots = [...slots].sort((a, b) => {
-    if (a.hour !== b.hour) return a.hour - b.hour;
-    return a.minute - b.minute;
-  });
-  
-  // Start from today at midnight WIB
-  const startDate = new Date(nowWib);
-  startDate.setHours(0, 0, 0, 0);
-  
-  // Iterate from today to 365 days ahead
-  for (let dayOffset = 0; dayOffset < 365; dayOffset++) {
-    const checkDate = new Date(startDate);
-    checkDate.setDate(checkDate.getDate() + dayOffset);
-    
-    const dayOfWeek = checkDate.getDay();
-    
-    for (const slot of sortedSlots) {
-      // Skip if weekly and day is not active
-      if (slot.type === 'weekly' && slot.week_days) {
-        if (!slot.week_days.includes(dayOfWeek)) continue;
-      }
-      
-      // Skip if slot time has already passed for today
-      if (dayOffset === 0) {
-        const slotTimeWib = new Date(checkDate);
-        slotTimeWib.setHours(slot.hour, slot.minute, 0, 0);
-        if (nowWib >= slotTimeWib) continue;
-      }
-      
-      // Check if slot+date is already occupied
-      const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
-      const occupiedDates = occupiedMap.get(slot.id);
-      if (occupiedDates?.has(dateKey)) continue;
-      
-      // Found available slot!
-      const scheduledAtWib = new Date(checkDate);
-      scheduledAtWib.setHours(slot.hour, slot.minute, 0, 0);
-      
-      return { slot, scheduledAtWib };
-    }
-  }
-  
-  return null;
-}
-
-// Merge two occupied maps
-function mergeOccupiedMaps(
-  map1: Map<string, Set<string>>,
-  map2: Map<string, Set<string>>
-): Map<string, Set<string>> {
-  const merged = new Map<string, Set<string>>();
-  
-  for (const [key, value] of map1) {
-    merged.set(key, new Set(value));
-  }
-  
-  for (const [key, value] of map2) {
-    if (merged.has(key)) {
-      for (const date of value) {
-        merged.get(key)!.add(date);
-      }
-    } else {
-      merged.set(key, new Set(value));
-    }
-  }
-  
-  return merged;
 }
 
 Deno.serve(async (req) => {
@@ -167,12 +69,10 @@ Deno.serve(async (req) => {
     
     const { user_id, queuelabs_accounts } = body;
 
-    const currentWib = nowInWib();
     console.log('Received batch-assign-content request:', { 
       user_id,
       accountsCount: queuelabs_accounts?.length,
       accounts: queuelabs_accounts,
-      currentTimeWib: currentWib.toISOString(),
       currentTimeUtc: new Date().toISOString()
     });
 
@@ -216,53 +116,9 @@ Deno.serve(async (req) => {
 
     console.log('Found profiles:', profiles?.length);
 
-    // Fetch all active slots for this user
-    const { data: allSlots, error: slotsError } = await supabase
-      .from('schedule_slots')
-      .select('*')
-      .eq('user_id', user_id)
-      .eq('is_active', true);
-
-    if (slotsError) {
-      console.error('Error fetching slots:', slotsError);
-      throw slotsError;
-    }
-
-    console.log('Found active slots:', allSlots?.length);
-
-    // Fetch existing assigned/scheduled contents
-    const slotIds = (allSlots || []).map(s => s.id);
-    const { data: existingContents } = await supabase
-      .from('contents')
-      .select('scheduled_at, scheduled_slot_id')
-      .in('scheduled_slot_id', slotIds.length > 0 ? slotIds : ['_'])
-      .eq('user_id', user_id)
-      .in('status', ['assigned', 'scheduled']);
-
-    // Build initial occupied map from database
-    const dbOccupiedMap = new Map<string, Set<string>>();
-    (existingContents || []).forEach((c: { scheduled_at: string | null; scheduled_slot_id: string | null }) => {
-      if (!c.scheduled_at || !c.scheduled_slot_id) return;
-      
-      const utcDate = new Date(c.scheduled_at);
-      const wibDate = new Date(utcDate.getTime() + WIB_OFFSET_MS);
-      const dateKey = `${wibDate.getFullYear()}-${wibDate.getMonth()}-${wibDate.getDate()}`;
-      
-      if (!dbOccupiedMap.has(c.scheduled_slot_id)) {
-        dbOccupiedMap.set(c.scheduled_slot_id, new Set());
-      }
-      dbOccupiedMap.get(c.scheduled_slot_id)!.add(dateKey);
-    });
-
-    console.log('DB Occupied slots:', Array.from(dbOccupiedMap.entries()).map(([k, v]) => [k, Array.from(v)]));
-
-    // Track slots assigned in this batch
-    const batchOccupiedMap = new Map<string, Set<string>>();
-    
-    // Process each account
+    // Process each account using atomic slot assignment
     const assignments: AccountAssignment[] = [];
     const errors: { platform: string; username: string; error: string }[] = [];
-    const nowWib = nowInWib();
 
     for (const account of queuelabs_accounts) {
       const { platform, username } = account;
@@ -306,64 +162,77 @@ Deno.serve(async (req) => {
 
       console.log(`Matched profile: ${matchedProfile.id} / ${matchedProfile.name}`);
 
-      // Get slots for this profile+platform
-      const platformSlots = (allSlots || []).filter(
-        s => s.profile_id === matchedProfile.id && s.platform === platform
-      ) as ScheduleSlot[];
+      // Create a placeholder content record first
+      const { data: content, error: contentError } = await supabase
+        .from('contents')
+        .insert({
+          user_id: user_id,
+          file_name: `batch_${Date.now()}_${platform}`,
+          status: 'pending',
+          platform: platform
+        })
+        .select()
+        .single();
 
-      if (platformSlots.length === 0) {
-        console.log(`No active slots for: ${platform} on profile ${matchedProfile.name}`);
+      if (contentError) {
+        console.error(`Error creating content for ${platform}:`, contentError);
         errors.push({
           platform,
           username,
-          error: `No active schedule slots for ${platform}`
+          error: `Failed to create content: ${contentError.message}`
         });
         continue;
       }
 
-      console.log(`Found ${platformSlots.length} slots for ${platform}`);
+      // Use atomic slot assignment function
+      const { data: assignmentResult, error: rpcError } = await supabase.rpc('assign_next_available_slot', {
+        p_profile_id: matchedProfile.id,
+        p_platform: platform,
+        p_content_id: content.id,
+        p_user_id: user_id
+      });
 
-      // Merge DB occupied + batch occupied
-      const combinedOccupied = mergeOccupiedMaps(dbOccupiedMap, batchOccupiedMap);
-
-      // Find next available slot
-      const nextAvailable = findNextAvailableSlot(platformSlots, combinedOccupied, nowWib);
-
-      if (!nextAvailable) {
-        console.log(`No available slot in next 365 days for: ${platform}`);
+      if (rpcError) {
+        console.error(`Error in atomic assignment for ${platform}:`, rpcError);
+        // Clean up the content
+        await supabase.from('contents').delete().eq('id', content.id);
         errors.push({
           platform,
           username,
-          error: `No available slot found in the next 365 days for ${platform}`
+          error: `Slot assignment failed: ${rpcError.message}`
         });
         continue;
       }
 
-      const { slot, scheduledAtWib } = nextAvailable;
-      const scheduledAtUtc = wibToUtc(scheduledAtWib);
+      console.log(`Atomic assignment result for ${platform}:`, assignmentResult);
 
-      // Mark this slot+date as occupied for subsequent accounts in this batch
-      const dateKey = `${scheduledAtWib.getFullYear()}-${scheduledAtWib.getMonth()}-${scheduledAtWib.getDate()}`;
-      if (!batchOccupiedMap.has(slot.id)) {
-        batchOccupiedMap.set(slot.id, new Set());
+      if (!assignmentResult?.success) {
+        // Clean up the content
+        await supabase.from('contents').delete().eq('id', content.id);
+        console.log(`No available slot for: ${platform}`);
+        errors.push({
+          platform,
+          username,
+          error: assignmentResult?.error || `No available slot found for ${platform}`
+        });
+        continue;
       }
-      batchOccupiedMap.get(slot.id)!.add(dateKey);
 
-      // Format scheduled date for response
-      const scheduledDateStr = `${scheduledAtWib.getFullYear()}-${String(scheduledAtWib.getMonth() + 1).padStart(2, '0')}-${String(scheduledAtWib.getDate()).padStart(2, '0')}`;
+      // Extract slot info from assignment result
+      const scheduledAtUtc = new Date(assignmentResult.scheduled_at);
 
-      console.log(`Assigned slot: ${slot.id} at ${slot.hour}:${String(slot.minute).padStart(2, '0')} on ${scheduledDateStr}`);
+      console.log(`Assigned slot: ${assignmentResult.slot_id} at ${assignmentResult.hour}:${String(assignmentResult.minute).padStart(2, '0')} on ${assignmentResult.scheduled_date}`);
 
       assignments.push({
         platform,
         username,
         profile_id: matchedProfile.id,
         profile_name: matchedProfile.name,
-        schedule_hour: slot.hour,
-        schedule_minute: slot.minute,
+        schedule_hour: assignmentResult.hour,
+        schedule_minute: assignmentResult.minute,
         scheduled_at: formatWib(scheduledAtUtc),
-        scheduled_date: scheduledDateStr,
-        slot_id: slot.id,
+        scheduled_date: assignmentResult.scheduled_date,
+        slot_id: assignmentResult.slot_id,
         status: 'success'
       });
     }

@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://queuelabs.avatara.id',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -64,7 +64,7 @@ function findNextAvailableSlot(
         if (nowWib >= slotTimeWib) continue;
       }
       
-      const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
+      const dateKey = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
       const occupiedDates = occupiedMap.get(slot.id);
       if (occupiedDates?.has(dateKey)) continue;
       
@@ -188,7 +188,7 @@ serve(async (req) => {
       
       const utcDate = new Date(c.scheduled_at);
       const wibDate = new Date(utcDate.getTime() + WIB_OFFSET_MS);
-      const dateKey = `${wibDate.getFullYear()}-${wibDate.getMonth()}-${wibDate.getDate()}`;
+      const dateKey = `${wibDate.getFullYear()}-${String(wibDate.getMonth() + 1).padStart(2, '0')}-${String(wibDate.getDate()).padStart(2, '0')}`;
       
       if (!occupiedMap.has(c.scheduled_slot_id)) {
         occupiedMap.set(c.scheduled_slot_id, new Set());

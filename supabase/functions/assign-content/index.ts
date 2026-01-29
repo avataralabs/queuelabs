@@ -1,9 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://queuelabs.avatara.id',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Maximum file size: 500MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
 
 // UTC+7 (WIB) timezone offset
 const WIB_OFFSET_HOURS = 7;
@@ -73,14 +76,38 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 1. Lookup user by email
-    const { data: userData, error: userError } = await supabase.auth.admin.listUsers();
-    if (userError) {
-      console.error('Error listing users:', userError);
-      throw userError;
+    // Validate file size
+    if (videoFile.size > MAX_FILE_SIZE) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB, got ${(videoFile.size / 1024 / 1024).toFixed(2)}MB`
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    const user = userData.users.find(u => u.email === username);
+    // 1. Lookup user by email (query auth.users directly for efficiency)
+    const { data: authUsers, error: userError } = await supabase
+      .from('auth.users')
+      .select('id, email')
+      .eq('email', username)
+      .limit(1);
+
+    // Fallback to listUsers if direct query fails (some Supabase configs don't allow this)
+    let user = authUsers?.[0];
+    if (userError || !user) {
+      console.log('Direct auth.users query failed, falling back to listUsers');
+      const { data: userData, error: listError } = await supabase.auth.admin.listUsers({
+        perPage: 1000 // Limit to reduce load
+      });
+      if (listError) {
+        console.error('Error listing users:', listError);
+        throw listError;
+      }
+      user = userData.users.find(u => u.email === username);
+    }
+
     if (!user) {
       return new Response(
         JSON.stringify({ success: false, error: `User not found: ${username}` }),

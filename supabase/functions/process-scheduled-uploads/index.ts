@@ -1,8 +1,13 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://queuelabs.avatara.id',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// Generate unique call ID for this invocation to prevent double uploads
+function generateCallId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`
 }
 
 // Retry configuration
@@ -117,11 +122,14 @@ Deno.serve(async (req) => {
       }
 
       // OPTIMISTIC LOCKING: Lock content and set upload_attempted_at atomically
+      // Use unique call_id to track which invocation has the lock
+      const callId = generateCallId()
       const { error: lockError, count: lockCount } = await supabase
         .from('contents')
-        .update({ 
+        .update({
           is_locked: true,
-          upload_attempted_at: now.toISOString()
+          upload_attempted_at: now.toISOString(),
+          webhook_call_id: callId
         }, { count: 'exact' })
         .eq('id', content.id)
         .eq('is_locked', false)
@@ -138,7 +146,19 @@ Deno.serve(async (req) => {
         continue
       }
 
-      console.log(`🔒 Successfully locked content ${content.id} (count: ${lockCount})`)
+      console.log(`🔒 Successfully locked content ${content.id} with callId: ${callId} (count: ${lockCount})`)
+
+      // DOUBLE-CHECK: Verify we still own the lock before proceeding
+      const { data: lockVerify } = await supabase
+        .from('contents')
+        .select('webhook_call_id, is_locked')
+        .eq('id', content.id)
+        .single()
+
+      if (!lockVerify || lockVerify.webhook_call_id !== callId || !lockVerify.is_locked) {
+        console.log(`⚠️ Lock verification failed for content ${content.id} - another instance took over`)
+        continue
+      }
 
       // Skip if profile not found
       if (!profile) {

@@ -66,6 +66,9 @@ export default function ContentPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState("pending");
   const [isAssigning, setIsAssigning] = useState(false);
+  
+  // Track assignments made within current batch to prevent race conditions
+  const batchAssignmentsRef = useRef<Map<string, Set<string>>>(new Map());
 
   // Multi-select state - new platform-based selection
   const [selectedPlatforms, setSelectedPlatforms] = useState<SelectedPlatform[]>([]);
@@ -106,9 +109,11 @@ export default function ContentPage() {
   }, [contents, scheduledContents]);
 
   // Find next available slot for a platform/profile combination
+  // Accepts optional batchAssignments to check against in-flight assignments
   const findNextAvailableSlot = useCallback((
     platformSlots: ScheduleSlot[],
-    nowWib: Date
+    nowWib: Date,
+    batchAssignments?: Map<string, Set<string>>
   ): NextAvailableSlot | null => {
     if (platformSlots.length === 0) return null;
 
@@ -132,8 +137,14 @@ export default function ContentPage() {
         if (dayOffset === 0 && nowWib >= slotDateTimeWib) continue;
 
         const dateStr = format(checkDate, 'yyyy-MM-dd');
+        
+        // Check database cache
         const occupiedDates = occupiedSlotDates.get(slot.id);
         if (occupiedDates?.has(dateStr)) continue;
+        
+        // Check in-flight batch assignments to prevent race conditions
+        const batchDates = batchAssignments?.get(slot.id);
+        if (batchDates?.has(dateStr)) continue;
 
         return {
           slotId: slot.id,
@@ -301,6 +312,9 @@ export default function ContentPage() {
     setIsAssigning(true);
     const nowWib = getNowWib();
     let successCount = 0;
+    
+    // Clear batch assignments ref at start of new batch
+    batchAssignmentsRef.current = new Map();
 
     try {
       for (let i = 0; i < selectedPlatforms.length; i++) {
@@ -312,12 +326,20 @@ export default function ContentPage() {
                s.is_active
         );
         
-        const nextSlot = findNextAvailableSlot(platformSlots, nowWib);
+        // Pass batch assignments to prevent race conditions within this batch
+        const nextSlot = findNextAvailableSlot(platformSlots, nowWib, batchAssignmentsRef.current);
         
         if (!nextSlot) {
           toast.error(`No slot available for ${formatUsername(selection.accountUsername)}`);
           continue;
         }
+
+        // Mark this slot+date as occupied in batch tracking BEFORE the async call
+        const dateStr = format(nextSlot.displayDate, 'yyyy-MM-dd');
+        if (!batchAssignmentsRef.current.has(nextSlot.slotId)) {
+          batchAssignmentsRef.current.set(nextSlot.slotId, new Set());
+        }
+        batchAssignmentsRef.current.get(nextSlot.slotId)!.add(dateStr);
 
         if (i === 0) {
           await updateContent.mutateAsync({
@@ -361,6 +383,8 @@ export default function ContentPage() {
       toast.error(error instanceof Error ? error.message : 'Failed to assign');
     } finally {
       setIsAssigning(false);
+      // Clear batch assignments after completion
+      batchAssignmentsRef.current = new Map();
     }
   };
 

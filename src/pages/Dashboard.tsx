@@ -453,17 +453,14 @@ ${profiles.map(p => `- ${p.name} (${p.platform}): ${scheduledContents.filter(sc 
             ) : (
               <div className="space-y-2">
                 {profiles.slice(0, 5).map(profile => (
-                  <div 
+                  <div
                     key={profile.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
+                    className="p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
                   >
-                    <div>
-                      <p className="font-medium text-sm">{profile.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {scheduledContents.filter(sc => sc.profile_id === profile.id).length} scheduled
-                      </p>
-                    </div>
-                    <PlatformBadge platform={profile.platform} size="sm" showLabel={false} />
+                    <p className="font-medium text-sm">{profile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {scheduledContents.filter(sc => sc.profile_id === profile.id).length} scheduled
+                    </p>
                   </div>
                 ))}
               </div>

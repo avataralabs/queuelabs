@@ -1,4 +1,4 @@
-project_id = "wspspxjabyjnpwbkfssd"
+project_id = "zbdpzscxiomluztwtack"
 
 [functions.uploadpost-create-profile]
 verify_jwt = false
